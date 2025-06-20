@@ -4,8 +4,6 @@
 
 AgentVault is an innovative platform that combines AI-powered decision-making with native monetization capabilities for cryptocurrency investment. Built for the **Coinbase Agents in Action Hackathon**, it integrates five cutting-edge technologies to create the future of autonomous finance.
 
-![AgentVault Banner](https://via.placeholder.com/1200x400/3b82f6/ffffff?text=AgentVault+%7C+Autonomous+AI+Agents+for+Crypto+Investment)
-
 ## 🌟 Key Features
 
 ### 🧠 AI-Powered Decision Making
@@ -364,13 +362,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ **Akash Track**: Decentralized compute deployment
 - ✅ **Pinata Track**: IPFS storage integration
 - ✅ **x402pay + CDP Track**: Payment processing and wallet integration
-
-## 📞 Support
-
-- **Documentation**: [docs.agentvault.io](https://docs.agentvault.io)
-- **Community Discord**: [discord.gg/agentvault](https://discord.gg/agentvault)
-- **Email Support**: <support@agentvault.io>
-- **GitHub Issues**: [github.com/agentvault/issues](https://github.com/agentvault/agentvault/issues)
 
 ## 🙏 Acknowledgments
 
