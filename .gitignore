@@ -1,0 +1,44 @@
+# Node dependencies
+node_modules/
+
+# Next.js build output
+.next/
+
+# General build / output directories
+dist/
+out/
+build/
+
+# TypeScript build info files
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Environment variables
+.env*
+!.env.example
+
+# Testing / coverage output
+coverage/
+
+# Prisma generated files / local DB
+prisma/dev.db
+
+# IDE / editor folders
+.vscode/
+.idea/
+
+# OS metadata files
+.DS_Store
+Thumbs.db
