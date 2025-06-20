@@ -1,0 +1,166 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String           @id @default(cuid())
+  email         String           @unique
+  name          String
+  walletAddress String           @unique
+  isVerified    Boolean          @default(false)
+  subscription  String           @default("FREE")
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  // Relations
+  agents    Agent[]
+  wallets   Wallet[]
+  payments  Payment[]
+  analyses  AIAnalysis[]
+  ipfsData  IPFSData[]
+
+  @@map("users")
+}
+
+model Agent {
+  id          String      @id @default(cuid())
+  name        String
+  description String
+  ownerId     String
+  status      String       @default("PAUSED")
+  config      String
+  performance String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  owner    User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  trades   Trade[]
+  analyses AIAnalysis[]
+
+  @@map("agents")
+}
+
+model Trade {
+  id        String   @id @default(cuid())
+  agentId   String
+  type      String   // BUY, SELL
+  symbol    String   // e.g., "BTC/USDC"
+  amount    Float
+  price     Float
+  status    String   // PENDING, EXECUTED, FAILED, CANCELLED
+  txHash    String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("trades")
+}
+
+model Wallet {
+  id        String    @id @default(cuid())
+  address   String    @unique
+  userId    String
+  balance   String
+  isActive  Boolean     @default(true)
+  network   String      @default("base")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallets")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  amount          Float
+  currency        String
+  type            String
+  status          String        @default("PENDING")
+  x402payId       String?       @unique
+  transactionHash String?
+  metadata        String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model AIAnalysis {
+  id         String       @id @default(cuid())
+  agentId    String?
+  userId     String
+  type       String
+  input      String
+  output     String
+  confidence Float
+  reasoning  String?
+  createdAt  DateTime     @default(now())
+
+  // Relations
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_analyses")
+}
+
+model MarketData {
+  id                   String   @id @default(cuid())
+  symbol               String   @unique
+  price                Float
+  volume24h            Float
+  change24h            Float
+  changePercentage24h  Float
+  marketCap            Float?
+  lastUpdated          DateTime @default(now())
+
+  @@map("market_data")
+}
+
+model CandlestickData {
+  id        String   @id @default(cuid())
+  symbol    String
+  timestamp DateTime
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  interval  String
+
+  @@unique([symbol, timestamp, interval])
+  @@map("candlestick_data")
+}
+
+model IPFSData {
+  id        String   @id @default(cuid())
+  userId    String
+  hash      String   @unique
+  fileName  String
+  fileSize  Int
+  pinSize   Int
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ipfs_data")
+}
+
+// Note: SQLite doesn't support enums, so we use strings with comments indicating valid values 

@@ -1,0 +1,38 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2020",
+    "outDir": "./dist/server",
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "baseUrl": "./src",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@/types": ["./types/index"]
+    }
+  },
+  "include": [
+    "src/server/index.ts",
+    "src/server/utils/**/*",
+    "src/types/**/*"
+  ],
+  "exclude": [
+    "src/server/services/**/*",
+    "src/server/routes/**/*",
+    "src/server/graphql/**/*",
+    "src/server/websocket/**/*",
+    "src/server/middleware/**/*", 
+    "src/server/database/**/*",
+    "src/server/redis/**/*",
+    "src/components/**/*",
+    "src/pages/**/*",
+    "src/app/**/*",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+} 

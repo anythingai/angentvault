@@ -1,0 +1,87 @@
+# Akash Network Deployment Configuration for AgentVault
+version: "2.0"
+
+services:
+  agentvault:
+    image: agentvault:latest
+    env:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=file:./prisma/prod.db
+      - REDIS_URL=redis://redis:6379
+    expose:
+      - port: 3000
+        as: 80
+        to:
+          - global: true
+      - port: 4000
+        as: 4000
+        to:
+          - global: true
+    resources:
+      cpu:
+        units: 2.0
+      memory:
+        size: 4Gi
+      storage:
+        size: 20Gi
+
+  redis:
+    image: redis:7-alpine
+    env:
+      - REDIS_ARGS=--appendonly yes
+    expose:
+      - port: 6379
+        to:
+          - service: agentvault
+    resources:
+      cpu:
+        units: 0.5
+      memory:
+        size: 512Mi
+      storage:
+        size: 5Gi
+
+profiles:
+  compute:
+    agentvault:
+      resources:
+        cpu:
+          units: 2.0
+        memory:
+          size: 4Gi
+        storage:
+          size: 20Gi
+    redis:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          size: 5Gi
+
+  placement:
+    dcloud:
+      attributes:
+        host: akash
+      signedBy:
+        anyOf:
+          - akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63
+      pricing:
+        agentvault:
+          denom: uakt
+          amount: 1000
+        redis:
+          denom: uakt
+          amount: 500
+
+deployment:
+  agentvault:
+    dcloud:
+      profile: agentvault
+      count: 1
+  redis:
+    dcloud:
+      profile: redis
+      count: 1 
