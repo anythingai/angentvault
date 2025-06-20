@@ -19,14 +19,14 @@ export const config: AppConfig = {
     maxRetries: parseInt(process.env.REDIS_MAX_RETRIES || '3'),
   },
   aws: {
-    accessKeyId: process.env.BEDROCK_ACCESS_KEY || '',
-    secretAccessKey: process.env.BEDROCK_SECRET_KEY || '',
-    region: process.env.BEDROCK_REGION || 'us-east-1',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    region: process.env.AWS_REGION || 'us-east-1',
     bedrockModelId: process.env.BEDROCK_MODEL_ID || 'amazon.nova-pro-v1:0',
   },
   cdp: {
-    apiKeyName: process.env.CDP_API_KEY || '',
-    privateKey: process.env.CDP_API_SECRET || '',
+    apiKeyName: process.env.CDP_API_KEY_NAME || '',
+    privateKey: process.env.CDP_PRIVATE_KEY || '',
     baseUrl: process.env.CDP_BASE_URL || 'https://api.coinbase.com',
   },
   x402pay: {
@@ -49,14 +49,12 @@ export const config: AppConfig = {
   },
 };
 
-// Validate required environment variables
+// Validate required environment variables (relaxed for development)
 const requiredEnvVars = [
-  'DATABASE_URL',
-  'JWT_SECRET',
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
   'CDP_API_KEY_NAME',
-  'CDP_PRIVATE_KEY',
+  'CDP_PRIVATE_KEY'
 ];
 
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);

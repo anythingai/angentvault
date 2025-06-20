@@ -20,6 +20,7 @@ import agentRoutes from './routes/agents';
 import portfolioRoutes from './routes/portfolio';
 import marketRoutes from './routes/market';
 import paymentRoutes from './routes/payments';
+import ipfsRoutes from './routes/ipfs';
 
 async function startServer() {
   const app = express();
@@ -78,6 +79,7 @@ async function startServer() {
   app.use('/api/portfolio', authMiddleware, portfolioRoutes);
   app.use('/api/market', marketRoutes);
   app.use('/api/payments', authMiddleware, paymentRoutes);
+  app.use('/api/ipfs', authMiddleware, ipfsRoutes);
 
   // GraphQL setup
   const server = new ApolloServer({
