@@ -37,6 +37,7 @@ module.exports = {
     'react/prop-types': 'off',
     'no-console': 'off', // Allow console for now
     'no-var': 'warn', // Changed to warn
+    'react-hooks/exhaustive-deps': 'warn',
   },
   ignorePatterns: [
     'node_modules/',
