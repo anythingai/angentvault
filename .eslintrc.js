@@ -20,7 +20,6 @@ module.exports = {
     'plugin:react/recommended',
     'plugin:react-hooks/recommended',
   ],
-  plugins: ['@typescript-eslint', 'react', 'react-hooks'],
   env: {
     browser: true,
     es2020: true,
