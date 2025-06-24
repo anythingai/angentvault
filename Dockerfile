@@ -16,9 +16,14 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Set environment variables for Prisma during build
+ENV DATABASE_PROVIDER=sqlite
+ENV DATABASE_URL=file:./dev.db
+
 # Generate Prisma client
 RUN npx prisma generate
-RUN npx prisma db push --skip-generate
+# Skip db push during build - will be done at runtime
+# RUN npx prisma db push --skip-generate
 
 # Build application
 RUN npm run build
@@ -27,7 +32,7 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -48,11 +53,11 @@ USER nextjs
 EXPOSE 3000
 EXPOSE 4000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 ENV DATABASE_PROVIDER=sqlite
 ENV DATABASE_URL=file:./dev.db
 
 # Start both frontend and backend
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"] 
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npm run start"] 
