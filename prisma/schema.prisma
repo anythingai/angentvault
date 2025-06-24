@@ -149,16 +149,20 @@ model CandlestickData {
 
 model IPFSData {
   id        String   @id @default(cuid())
-  userId    String
+  userId    String?
+  agentId   String
   hash      String   @unique
-  fileName  String
-  fileSize  Int
-  pinSize   Int
+  type      String   // TRADING_HISTORY, PERFORMANCE_REPORT, AUDIT_TRAIL
+  fileName  String?
+  fileSize  Int?
+  pinSize   Int?
+  size      Int?
+  pinned    Boolean  @default(true)
   metadata  String?
   createdAt DateTime @default(now())
 
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ipfs_data")
 }

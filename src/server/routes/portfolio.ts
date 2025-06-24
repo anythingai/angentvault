@@ -91,7 +91,7 @@ router.get('/performance', async (req: any, res) => {
 
     // Calculate performance metrics (simplified for demo)
     const totalTrades = trades.length;
-    const profitableTrades = trades.filter(t => 
+    const profitableTrades = trades.filter(_ => 
       // Simple mock calculation
       Math.random() > 0.4
     ).length;

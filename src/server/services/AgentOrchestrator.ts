@@ -1,22 +1,19 @@
-import { db, getClient } from '../database';
+import { db } from '../database';
 import { logger } from '../utils/logger';
 import { BedrockService } from './BedrockService';
 import { CDPWalletService } from './CDPWalletService';
 import { X402PayService } from './X402PayService';
-import { PinataService } from './PinataService';
 
 export class AgentOrchestrator {
   private bedrockService: BedrockService;
   private walletService: CDPWalletService;
   private paymentService: X402PayService;
-  private pinataService: PinataService;
   private activeAgents: Map<string, NodeJS.Timeout> = new Map();
 
   constructor() {
     this.bedrockService = new BedrockService();
     this.walletService = new CDPWalletService();
     this.paymentService = new X402PayService();
-    this.pinataService = new PinataService();
   }
 
   async initialize(): Promise<void> {
@@ -132,23 +129,16 @@ export class AgentOrchestrator {
       }
 
       // Store analysis
-      const analysisRecord = await db.aiAnalysis.create({
+      await db.aiAnalysis.create({
         data: {
           agentId: agent.id,
           userId: agent.ownerId, // Add the required user field
           type: 'MARKET_SENTIMENT',
-          input: JSON.stringify(marketData),
-          output: JSON.stringify(analysis),
+          input: marketData,
+          output: analysis,
           confidence: 0.85,
           reasoning: 'Automated agent analysis cycle'
         }
-      });
-
-      // Store analysis on IPFS for immutable audit trail
-      await this.pinataService.storeAIAnalysis(agent.ownerId, agent.id, {
-        ...analysisRecord,
-        marketData,
-        analysis
       });
 
       logger.info('Agent cycle completed', { agentId: agent.id });
@@ -178,7 +168,7 @@ export class AgentOrchestrator {
     return data;
   }
 
-  private async makeTradeDecision(agent: any, analysis: any): Promise<any> {
+  private async makeTradeDecision(_agent: any, _analysis: any): Promise<any> {
     // Simple decision logic for demo
     const shouldTrade = Math.random() > 0.8; // 20% chance to trade
     
@@ -200,7 +190,7 @@ export class AgentOrchestrator {
         symbol: decision.symbol 
       });
 
-      const trade = await db.trade.create({
+      await db.trade.create({
         data: {
           agentId: agent.id,
           type: decision.action.toUpperCase(),
@@ -210,15 +200,6 @@ export class AgentOrchestrator {
           status: 'EXECUTED'
         }
       });
-
-      // Store trade history on IPFS for immutable audit trail
-      const recentTrades = await db.trade.findMany({
-        where: { agentId: agent.id },
-        orderBy: { createdAt: 'desc' },
-        take: 10
-      });
-
-      await this.pinataService.storeTradeHistory(agent.ownerId, agent.id, recentTrades);
 
       logger.info('Trade executed successfully', { agentId: agent.id });
     } catch (error) {

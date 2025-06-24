@@ -1,245 +1,340 @@
 import { WebSocket } from 'ws';
 import { logger } from '../utils/logger';
-import { WebSocketMessage, WebSocketEventType } from '../../types';
+import { verifyToken } from '../middleware/auth';
+import { MarketDataService } from '../services/MarketDataService';
 
-interface ExtendedWebSocket extends WebSocket {
+interface WebSocketClient {
+  ws: WebSocket;
   userId?: string;
-  agentIds?: string[];
-  isAlive?: boolean;
+  subscriptions: Set<string>;
+  isAlive: boolean;
 }
 
-// Store active connections
-const connections = new Map<string, ExtendedWebSocket>();
+class WebSocketHandler {
+  private clients: Map<WebSocket, WebSocketClient> = new Map();
+  private marketDataService: MarketDataService;
+  private pingInterval: NodeJS.Timeout | null = null;
 
-export function wsHandler(ws: ExtendedWebSocket, req: any) {
-  logger.info('New WebSocket connection established');
-  
-  // Set connection as alive
-  ws.isAlive = true;
-  
-  // Handle heartbeat
-  ws.on('pong', () => {
-    ws.isAlive = true;
-  });
+  constructor() {
+    this.marketDataService = new MarketDataService();
+  }
 
-  // Handle incoming messages
-  ws.on('message', async (data: Buffer) => {
+  async initialize(): Promise<void> {
+    // Initialize market data service
+    await this.marketDataService.initialize();
+
+    // Set up event listeners for market data updates
+    this.marketDataService.on('ticker', (data) => {
+      this.broadcastMarketData('ticker', data);
+    });
+
+    this.marketDataService.on('orderbook', (data) => {
+      this.broadcastMarketData('orderbook', data);
+    });
+
+    this.marketDataService.on('trade', (data) => {
+      this.broadcastMarketData('trade', data);
+    });
+
+    // Start ping interval to keep connections alive
+    this.pingInterval = setInterval(() => {
+      this.pingClients();
+    }, 30000);
+
+    logger.info('WebSocket handler initialized');
+  }
+
+  async shutdown(): Promise<void> {
+    // Clear ping interval
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+
+    // Close all client connections
+    for (const [ws] of this.clients) {
+      ws.close(1001, 'Server shutting down');
+    }
+    this.clients.clear();
+
+    // Shutdown market data service
+    await this.marketDataService.shutdown();
+
+    logger.info('WebSocket handler shutdown complete');
+  }
+
+  handleConnection(ws: WebSocket, _request: any): void {
+    const client: WebSocketClient = {
+      ws,
+      subscriptions: new Set(),
+      isAlive: true,
+    };
+
+    this.clients.set(ws, client);
+    logger.info('New WebSocket connection established');
+
+    // Send welcome message
+    this.sendMessage(ws, {
+      type: 'welcome',
+      payload: {
+        message: 'Connected to AgentVault WebSocket',
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    // Set up event handlers
+    ws.on('message', async (message: Buffer) => {
+      await this.handleMessage(ws, message);
+    });
+
+    ws.on('pong', () => {
+      const client = this.clients.get(ws);
+      if (client) {
+        client.isAlive = true;
+      }
+    });
+
+    ws.on('close', () => {
+      this.handleDisconnection(ws);
+    });
+
+    ws.on('error', (error) => {
+      logger.error('WebSocket error:', error);
+      this.handleDisconnection(ws);
+    });
+  }
+
+  private async handleMessage(ws: WebSocket, message: Buffer): Promise<void> {
     try {
-      const message: WebSocketMessage = JSON.parse(data.toString());
-      await handleMessage(ws, message);
+      const data = JSON.parse(message.toString());
+      const client = this.clients.get(ws);
+
+      if (!client) {
+        return;
+      }
+
+      switch (data.type) {
+        case 'auth':
+          await this.handleAuth(ws, data.payload);
+          break;
+
+        case 'subscribe':
+          this.handleSubscribe(ws, data.payload);
+          break;
+
+        case 'unsubscribe':
+          this.handleUnsubscribe(ws, data.payload);
+          break;
+
+        case 'ping':
+          this.sendMessage(ws, { type: 'pong', timestamp: Date.now() });
+          break;
+
+        default:
+          this.sendError(ws, 'Unknown message type');
+      }
     } catch (error) {
-      logger.error('WebSocket message parsing error:', error);
-      sendError(ws, 'Invalid message format');
+      logger.error('Failed to handle WebSocket message:', error);
+      this.sendError(ws, 'Invalid message format');
     }
-  });
+  }
 
-  // Handle connection close
-  ws.on('close', () => {
-    logger.info('WebSocket connection closed');
-    if (ws.userId) {
-      connections.delete(ws.userId);
+  private async handleAuth(ws: WebSocket, payload: any): Promise<void> {
+    try {
+      const { token } = payload;
+      const decoded = await verifyToken(token);
+      
+      const client = this.clients.get(ws);
+      if (client && decoded) {
+        client.userId = decoded.userId;
+        
+        this.sendMessage(ws, {
+          type: 'auth_success',
+          payload: {
+            userId: decoded.userId,
+            message: 'Authentication successful',
+          },
+        });
+
+        // Subscribe to user-specific events
+        client.subscriptions.add(`user:${decoded.userId}`);
+      } else {
+        throw new Error('Authentication failed');
+      }
+    } catch (error) {
+      logger.error('WebSocket authentication failed:', error);
+      this.sendError(ws, 'Authentication failed');
     }
-  });
+  }
 
-  // Handle errors
-  ws.on('error', (error) => {
-    logger.error('WebSocket error:', error);
-  });
+  private handleSubscribe(ws: WebSocket, payload: any): void {
+    const client = this.clients.get(ws);
+    if (!client) return;
 
-  // Send welcome message
-  sendMessage(ws, {
-    type: 'connection_established',
-    payload: {
-      message: 'Connected to AgentVault WebSocket',
-      timestamp: new Date(),
-    },
-    timestamp: new Date(),
-  });
-}
-
-async function handleMessage(ws: ExtendedWebSocket, message: WebSocketMessage) {
-  switch (message.type) {
-    case 'authenticate':
-      await handleAuthentication(ws, message.payload);
-      break;
-      
-    case 'subscribe_agent':
-      await handleAgentSubscription(ws, message.payload);
-      break;
-      
-    case 'unsubscribe_agent':
-      await handleAgentUnsubscription(ws, message.payload);
-      break;
-      
-    case 'ping':
-      sendMessage(ws, {
-        type: 'pong',
-        payload: { timestamp: new Date() },
-        timestamp: new Date(),
+    const { channels } = payload;
+    
+    if (Array.isArray(channels)) {
+      channels.forEach(channel => {
+        client.subscriptions.add(channel);
+        logger.info(`Client subscribed to channel: ${channel}`);
       });
-      break;
-      
-    default:
-      logger.warn('Unknown WebSocket message type:', message.type);
-      sendError(ws, `Unknown message type: ${message.type}`);
-  }
-}
 
-async function handleAuthentication(ws: ExtendedWebSocket, payload: any) {
-  try {
-    // In a real implementation, you'd verify the JWT token
-    const { token, userId } = payload;
+      this.sendMessage(ws, {
+        type: 'subscribed',
+        payload: { channels },
+      });
+    }
+  }
+
+  private handleUnsubscribe(ws: WebSocket, payload: any): void {
+    const client = this.clients.get(ws);
+    if (!client) return;
+
+    const { channels } = payload;
     
-    if (!token || !userId) {
-      sendError(ws, 'Authentication failed: Missing token or userId');
-      return;
+    if (Array.isArray(channels)) {
+      channels.forEach(channel => {
+        client.subscriptions.delete(channel);
+        logger.info(`Client unsubscribed from channel: ${channel}`);
+      });
+
+      this.sendMessage(ws, {
+        type: 'unsubscribed',
+        payload: { channels },
+      });
     }
-
-    // Store user connection
-    ws.userId = userId;
-    connections.set(userId, ws);
-
-    sendMessage(ws, {
-      type: 'authenticated',
-      payload: {
-        userId,
-        message: 'Authentication successful',
-      },
-      timestamp: new Date(),
-    });
-
-    logger.info('WebSocket authenticated:', { userId });
-  } catch (error) {
-    logger.error('WebSocket authentication error:', error);
-    sendError(ws, 'Authentication failed');
   }
-}
 
-async function handleAgentSubscription(ws: ExtendedWebSocket, payload: any) {
-  try {
-    const { agentId } = payload;
+  private handleDisconnection(ws: WebSocket): void {
+    const client = this.clients.get(ws);
+    if (client) {
+      logger.info('WebSocket connection closed', { userId: client.userId });
+      this.clients.delete(ws);
+    }
+  }
+
+  private pingClients(): void {
+    for (const [ws, client] of this.clients) {
+      if (!client.isAlive) {
+        ws.terminate();
+        this.clients.delete(ws);
+        continue;
+      }
+
+      client.isAlive = false;
+      ws.ping();
+    }
+  }
+
+  private sendMessage(ws: WebSocket, message: any): void {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  }
+
+  private sendError(ws: WebSocket, error: string): void {
+    this.sendMessage(ws, {
+      type: 'error',
+      payload: { error },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // Broadcast methods for different event types
+  broadcastAgentUpdate(agentId: string, update: any): void {
+    const message = {
+      type: 'agent_update',
+      payload: { agentId, ...update },
+      timestamp: new Date().toISOString(),
+    };
+
+    this.broadcastToChannel(`agent:${agentId}`, message);
+  }
+
+  broadcastTradeExecution(userId: string, trade: any): void {
+    const message = {
+      type: 'trade_executed',
+      payload: trade,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.broadcastToChannel(`user:${userId}`, message);
+  }
+
+  broadcastMarketData(type: string, data: any): void {
+    const message = {
+      type: `market_${type}`,
+      payload: data,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Broadcast to all clients subscribed to market data
+    this.broadcastToChannel('market:all', message);
     
-    if (!agentId) {
-      sendError(ws, 'Agent ID required for subscription');
-      return;
+    // Also broadcast to symbol-specific channels
+    if (data.symbol) {
+      this.broadcastToChannel(`market:${data.symbol}`, message);
     }
-
-    if (!ws.agentIds) {
-      ws.agentIds = [];
-    }
-
-    if (!ws.agentIds.includes(agentId)) {
-      ws.agentIds.push(agentId);
-    }
-
-    sendMessage(ws, {
-      type: 'agent_subscribed',
-      payload: {
-        agentId,
-        message: `Subscribed to agent ${agentId} updates`,
-      },
-      timestamp: new Date(),
-    });
-
-    logger.info('Agent subscription added:', { userId: ws.userId, agentId });
-  } catch (error) {
-    logger.error('Agent subscription error:', error);
-    sendError(ws, 'Failed to subscribe to agent');
   }
-}
 
-async function handleAgentUnsubscription(ws: ExtendedWebSocket, payload: any) {
-  try {
-    const { agentId } = payload;
+  broadcastBalanceUpdate(userId: string, balance: any): void {
+    const message = {
+      type: 'balance_update',
+      payload: balance,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.broadcastToChannel(`user:${userId}`, message);
+  }
+
+  private broadcastToChannel(channel: string, message: any): void {
+    let count = 0;
     
-    if (!agentId || !ws.agentIds) {
-      sendError(ws, 'Invalid unsubscription request');
-      return;
+    for (const [ws, client] of this.clients) {
+      if (client.subscriptions.has(channel) || client.subscriptions.has('*')) {
+        this.sendMessage(ws, message);
+        count++;
+      }
     }
 
-    ws.agentIds = ws.agentIds.filter(id => id !== agentId);
+    if (count > 0) {
+      logger.debug(`Broadcast to ${count} clients on channel: ${channel}`);
+    }
+  }
 
-    sendMessage(ws, {
-      type: 'agent_unsubscribed',
-      payload: {
-        agentId,
-        message: `Unsubscribed from agent ${agentId} updates`,
-      },
-      timestamp: new Date(),
-    });
+  // Public method to get connection statistics
+  getStats(): any {
+    const stats = {
+      totalConnections: this.clients.size,
+      authenticatedConnections: 0,
+      channelSubscriptions: new Map<string, number>(),
+    };
 
-    logger.info('Agent subscription removed:', { userId: ws.userId, agentId });
-  } catch (error) {
-    logger.error('Agent unsubscription error:', error);
-    sendError(ws, 'Failed to unsubscribe from agent');
+    for (const client of this.clients.values()) {
+      if (client.userId) {
+        stats.authenticatedConnections++;
+      }
+
+      for (const channel of client.subscriptions) {
+        const count = stats.channelSubscriptions.get(channel) || 0;
+        stats.channelSubscriptions.set(channel, count + 1);
+      }
+    }
+
+    return {
+      ...stats,
+      channelSubscriptions: Object.fromEntries(stats.channelSubscriptions),
+    };
   }
 }
 
-function sendMessage(ws: ExtendedWebSocket, message: WebSocketMessage) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(message));
-  }
+// Create singleton instance
+const wsHandlerInstance = new WebSocketHandler();
+
+// Export the connection handler function
+export function wsHandler(ws: WebSocket, request: any): void {
+  wsHandlerInstance.handleConnection(ws, request);
 }
 
-function sendError(ws: ExtendedWebSocket, error: string) {
-  sendMessage(ws, {
-    type: 'error',
-    payload: { error, timestamp: new Date() },
-    timestamp: new Date(),
-  });
-}
-
-// Broadcast functions for different event types
-export function broadcastAgentUpdate(agentId: string, data: any) {
-  const message: WebSocketMessage = {
-    type: WebSocketEventType.AGENT_STATUS_UPDATE,
-    payload: { agentId, ...data },
-    timestamp: new Date(),
-  };
-
-  connections.forEach((ws, userId) => {
-    if (ws.agentIds?.includes(agentId)) {
-      sendMessage(ws, message);
-    }
-  });
-}
-
-export function broadcastTradeExecuted(tradeData: any) {
-  const message: WebSocketMessage = {
-    type: WebSocketEventType.TRADE_EXECUTED,
-    payload: tradeData,
-    timestamp: new Date(),
-  };
-
-  connections.forEach((ws, userId) => {
-    if (ws.agentIds?.includes(tradeData.agentId)) {
-      sendMessage(ws, message);
-    }
-  });
-}
-
-export function broadcastMarketDataUpdate(marketData: any) {
-  const message: WebSocketMessage = {
-    type: WebSocketEventType.MARKET_DATA_UPDATE,
-    payload: marketData,
-    timestamp: new Date(),
-  };
-
-  connections.forEach((ws) => {
-    sendMessage(ws, message);
-  });
-}
-
-// Heartbeat to keep connections alive
-setInterval(() => {
-  connections.forEach((ws, userId) => {
-    if (!ws.isAlive) {
-      logger.info('Terminating inactive WebSocket connection:', { userId });
-      connections.delete(userId);
-      return ws.terminate();
-    }
-
-    ws.isAlive = false;
-    ws.ping();
-  });
-}, 30000); // 30 seconds 
+// Export the handler instance for use in other parts of the application
+export { wsHandlerInstance as websocketHandler }; 

@@ -290,7 +290,7 @@ export class CDPWalletService {
     logger.info('Wallet data stored', { userId, hasWalletData: !!walletData });
   }
 
-  private async getWalletData(userId: string): Promise<any | null> {
+  private async getWalletData(_userId: string): Promise<any | null> {
     // This would retrieve wallet data from the database
     // For demo purposes, return null (new wallet will be created)
     return null;
@@ -308,7 +308,7 @@ export class CDPWalletService {
     return (prices[asset] || 1) * amount;
   }
 
-  private generateTradingContract(strategy: any): string {
+  private generateTradingContract(_strategy: any): string {
     // Generate Solidity contract code for automated trading
     return `
       pragma solidity ^0.8.0;

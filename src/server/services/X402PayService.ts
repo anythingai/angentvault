@@ -227,7 +227,7 @@ export class X402PayService {
     return pricing[planType] || pricing.basic;
   }
 
-  private async getAgentOwnerAddress(agentId: string): Promise<string> {
+  private async getAgentOwnerAddress(_agentId: string): Promise<string> {
     // This would query the database to get the agent owner's wallet address
     // For now, return a placeholder
     return '0x742d35Cc6634C0532925a3b8D404d01A8dB9c0CF';

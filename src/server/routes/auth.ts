@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 import { db } from '../database';
 import { config } from '../config';
 import { logger } from '../utils/logger';
@@ -10,7 +9,7 @@ const router = Router();
 // Demo login for hackathon
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email } = req.body;
 
     // For demo purposes, create a demo user if it doesn't exist
     let user = await db.user.findUnique({
@@ -68,7 +67,7 @@ router.post('/login', async (req, res) => {
 // Register endpoint (for demo)
 router.post('/register', async (req, res) => {
   try {
-    const { email, name, password } = req.body;
+    const { email, name } = req.body;
 
     if (!email || !name) {
       return res.status(400).json({

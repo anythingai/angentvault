@@ -109,4 +109,20 @@ export const generateToken = (user: { id: string; email: string; walletAddress: 
     config.security.jwtSecret,
     { expiresIn: '7d' }
   );
+};
+
+export const verifyToken = (token: string): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    jwt.verify(token, config.security.jwtSecret, (err, decoded) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({
+          userId: (decoded as any).id || (decoded as any).userId,
+          email: (decoded as any).email,
+          walletAddress: (decoded as any).walletAddress
+        });
+      }
+    });
+  });
 }; 

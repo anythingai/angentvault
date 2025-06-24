@@ -259,11 +259,16 @@ export interface AppConfig {
   x402pay: X402PayConfig;
   pinata: PinataConfig;
   security: SecurityConfig;
+  features?: FeatureConfig;
+  agent?: AgentConfigSettings;
+  marketData?: MarketDataConfig;
 }
 
 export interface ServerConfig {
   port: number;
   environment: string;
+  apiUrl?: string;
+  clientUrl?: string;
 }
 
 export interface DatabaseConfig {
@@ -288,25 +293,49 @@ export interface CDPConfig {
   apiKeyName: string;
   privateKey: string;
   baseUrl: string;
+  network?: string;
+  walletId?: string;
 }
 
 export interface X402PayConfig {
   apiKey: string;
+  secretKey?: string;
   baseUrl: string;
   webhookSecret: string;
   platformWallet: string;
+  enabled?: boolean;
 }
 
 export interface PinataConfig {
   apiKey: string;
   secretApiKey: string;
   jwt: string;
+  gateway?: string;
 }
 
 export interface SecurityConfig {
   jwtSecret: string;
   encryptionKey: string;
-  corsOrigin: string;
+  corsOrigin: string | string[];
   rateLimitWindowMs: number;
   rateLimitMaxRequests: number;
+}
+
+export interface FeatureConfig {
+  enableDemoMode: boolean;
+  enablePaperTrading: boolean;
+  enableRealTrading: boolean;
+  enableWebSocket: boolean;
+}
+
+export interface AgentConfigSettings {
+  executionInterval: number;
+  maxTradeSize: number;
+  defaultSlippage: number;
+  maxDailyTrades: number;
+}
+
+export interface MarketDataConfig {
+  coingeckoApiKey?: string;
+  coinmarketcapApiKey?: string;
 } 
