@@ -365,13 +365,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ **Pinata Track**: IPFS storage integration
 - ✅ **x402pay + CDP Track**: Payment processing and wallet integration
 
-## 📞 Support
-
-- **Documentation**: [docs.agentvault.io](https://docs.agentvault.io)
-- **Community Discord**: [discord.gg/agentvault](https://discord.gg/agentvault)
-- **Email Support**: <support@agentvault.io>
-- **GitHub Issues**: [github.com/agentvault/issues](https://github.com/agentvault/agentvault/issues)
-
 ## 🙏 Acknowledgments
 
 - **Coinbase** for the CDP Wallet SDK and hackathon opportunity
