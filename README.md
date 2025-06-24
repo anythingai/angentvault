@@ -4,7 +4,7 @@
 
 AgentVault is an innovative platform that combines AI-powered decision-making with native monetization capabilities for cryptocurrency investment. Built for the **Coinbase Agents in Action Hackathon**, it integrates five cutting-edge technologies to create the future of autonomous finance.
 
-![AgentVault Banner](https://via.placeholder.com/1200x400/3b82f6/ffffff?text=AgentVault+%7C+Autonomous+AI+Agents+for+Crypto+Investment)
+![AgentVault Banner]([https://via.placeholder.com/1200x400/3b82f6/ffffff?text=AgentVault+%7C+Autonomous+AI+Agents+for+Crypto+Investment](https://devfolio-prod.s3.ap-south-1.amazonaws.com/hackathons/c1787d57660549d5889987ca39497120/projects/05c04e8800694c1590c5089cd5639139/970acb1e-207c-494b-a01c-61578ade02e6.jpeg))
 
 ## 🌟 Key Features
 
