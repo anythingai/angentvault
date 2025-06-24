@@ -1,14 +1,10 @@
 import { BedrockService } from '../services/BedrockService';
-import { CDPWalletService } from '../services/CDPWalletService';
-import { X402PayService } from '../services/X402PayService';
 import { db } from '../database';
 import { logger } from '../utils/logger';
-import { AgentStatus, TradeStatus, PaymentStatus } from '../../types';
+import { AgentStatus, TradeStatus } from '../../types';
 import { GraphQLScalarType, Kind } from 'graphql';
 
 const bedrockService = new BedrockService();
-const walletService = new CDPWalletService();
-const paymentService = new X402PayService();
 
 // Modify the JSON scalar implementation
 function parseAST(ast: any): any {
