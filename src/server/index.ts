@@ -13,6 +13,10 @@ import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { wsHandler } from './websocket/handler';
+import { ApolloServerPluginLandingPageProductionDefault } from 'apollo-server-core';
+import { redis } from './redis';
+import { metricsRouter } from './metrics';
+import { metricsMiddleware } from './middleware/metrics';
 
 // Import route handlers
 import authRoutes from './routes/auth';
@@ -20,6 +24,7 @@ import agentRoutes from './routes/agents';
 import portfolioRoutes from './routes/portfolio';
 import marketRoutes from './routes/market';
 import paymentRoutes from './routes/payments';
+import { paywallMiddleware } from './middleware/paywall';
 
 async function startServer() {
   const app = express();
@@ -54,6 +59,14 @@ async function startServer() {
     process.exit(1);
   }
 
+  // Connect to Redis
+  try {
+    await redis.connect();
+  } catch (error) {
+    logger.error('Failed to connect to Redis, exiting...');
+    process.exit(1);
+  }
+
   // Health check endpoint
   app.get('/health', async (req, res) => {
     try {
@@ -74,7 +87,7 @@ async function startServer() {
 
   // API routes
   app.use('/api/auth', authRoutes);
-  app.use('/api/agents', authMiddleware, agentRoutes);
+  app.use('/api/agents', authMiddleware, paywallMiddleware(), agentRoutes);
   app.use('/api/portfolio', authMiddleware, portfolioRoutes);
   app.use('/api/market', marketRoutes);
   app.use('/api/payments', authMiddleware, paymentRoutes);
@@ -90,7 +103,11 @@ async function startServer() {
       };
     },
     introspection: process.env.NODE_ENV !== 'production',
+    plugins: process.env.NODE_ENV === 'production' ? [ApolloServerPluginLandingPageProductionDefault()] : [],
   });
+
+  // Apply paywall to GraphQL endpoint
+  app.use('/graphql', authMiddleware, paywallMiddleware());
 
   await server.start();
   server.applyMiddleware({ app: app as any, path: '/graphql' });
@@ -104,6 +121,12 @@ async function startServer() {
   // WebSocket server for real-time updates
   const wss = new WebSocketServer({ server: httpServer });
   wss.on('connection', wsHandler);
+
+  // Metrics collection
+  app.use(metricsMiddleware([/\/metrics/]))
+
+  // Expose Prometheus metrics
+  app.use('/metrics', metricsRouter);
 
   // Start the server
   const PORT = config.server.port;

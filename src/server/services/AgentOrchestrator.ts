@@ -3,21 +3,36 @@ import { logger } from '../utils/logger';
 import { BedrockService } from './BedrockService';
 import { CDPWalletService } from './CDPWalletService';
 import { X402PayService } from './X402PayService';
+import { PinataService } from './PinataService';
+import { MarketDataService } from './MarketDataService';
+import { config } from '../config';
+import { agentTradeCounter } from '../metrics';
 
 export class AgentOrchestrator {
   private bedrockService: BedrockService;
   private walletService: CDPWalletService;
   private paymentService: X402PayService;
+  private pinataService: PinataService;
+  private marketDataService: MarketDataService;
   private activeAgents: Map<string, NodeJS.Timeout> = new Map();
 
   constructor() {
     this.bedrockService = new BedrockService();
     this.walletService = new CDPWalletService();
     this.paymentService = new X402PayService();
+    this.pinataService = new PinataService();
+    this.marketDataService = new MarketDataService();
   }
 
   async initialize(): Promise<void> {
     logger.info('Initializing Agent Orchestrator');
+    
+    // Initialize market data streaming
+    try {
+      await this.marketDataService.initialize();
+    } catch (mdErr) {
+      logger.error('Failed to initialize market data service:', mdErr);
+    }
     
     // Start monitoring active agents
     await this.loadActiveAgents();
@@ -35,6 +50,7 @@ export class AgentOrchestrator {
     }
     
     this.activeAgents.clear();
+    await this.marketDataService.shutdown();
     logger.info('Agent Orchestrator shutdown complete');
   }
 
@@ -141,6 +157,13 @@ export class AgentOrchestrator {
         }
       });
 
+      // Upload analysis to IPFS (non-blocking)
+      try {
+        await this.pinataService.uploadJSON({ agentId: agent.id, marketData, analysis }, `analysis_${agent.id}_${Date.now()}.json`);
+      } catch (pinErr) {
+        logger.warn('Pinata upload failed', pinErr);
+      }
+
       logger.info('Agent cycle completed', { agentId: agent.id });
     } catch (error) {
       logger.error('Agent cycle failed:', error);
@@ -154,18 +177,32 @@ export class AgentOrchestrator {
   }
 
   private async getMarketData(tradingPairs: string[]): Promise<any> {
-    // Mock market data for demo
-    const data: any = {};
-    
-    for (const pair of tradingPairs) {
-      data[pair] = {
-        price: pair.includes('BTC') ? 45000 : pair.includes('ETH') ? 3000 : 1,
-        volume: 1000000,
-        change24h: Math.random() * 10 - 5 // Random change between -5% and +5%
-      };
-    }
+    if (!tradingPairs.length) return {};
 
-    return data;
+    try {
+      const tickers = await this.marketDataService.getMarketData(tradingPairs);
+      const formatted: Record<string, any> = {};
+      tickers.forEach(t => {
+        formatted[t.symbol] = {
+          price: t.price,
+          volume: t.volume24h,
+          change24h: t.change24h,
+        };
+      });
+      return formatted;
+    } catch (error) {
+      logger.error('Failed to fetch live market data, falling back to mock:', error);
+      // fallback to mock if service unavailable
+      const data: any = {};
+      for (const pair of tradingPairs) {
+        data[pair] = {
+          price: 0,
+          volume: 0,
+          change24h: 0,
+        };
+      }
+      return data;
+    }
   }
 
   private async makeTradeDecision(_agent: any, _analysis: any): Promise<any> {
@@ -182,26 +219,47 @@ export class AgentOrchestrator {
 
   private async executeTrade(agent: any, decision: any): Promise<void> {
     try {
-      // This would integrate with CDP Wallet for actual trading
-      logger.info('Executing trade', { 
-        agentId: agent.id, 
+      const [baseAsset, quoteAsset] = decision.symbol.split('/');
+
+      logger.info('Initiating wallet trade', {
+        agentId: agent.id,
         action: decision.action,
         amount: decision.amount,
-        symbol: decision.symbol 
+        baseAsset,
+        quoteAsset,
       });
 
-      await db.trade.create({
+      if (config.features?.enableRealTrading) {
+        await this.walletService.executeTrade(
+          agent.ownerId,
+          decision.action === 'buy' ? quoteAsset : baseAsset,
+          decision.action === 'buy' ? baseAsset : quoteAsset,
+          decision.amount,
+          decision.action.toUpperCase(),
+        );
+      }
+
+      const tradeRecord = await db.trade.create({
         data: {
           agentId: agent.id,
           type: decision.action.toUpperCase(),
           symbol: decision.symbol,
           amount: decision.amount,
-          price: 45000, // Mock price
-          status: 'EXECUTED'
-        }
+          price: decision.price || 0,
+          status: 'EXECUTED',
+        },
       });
 
-      logger.info('Trade executed successfully', { agentId: agent.id });
+      // Upload trade record to IPFS (non-blocking)
+      try {
+        await this.pinataService.uploadJSON(tradeRecord, `trade_${tradeRecord.id}.json`);
+      } catch (err) {
+        logger.warn('Pinata trade upload failed', err);
+      }
+
+      agentTradeCounter.inc({ symbol: decision.symbol, type: decision.action.toUpperCase() });
+
+      logger.info('Trade record stored', { agentId: agent.id });
     } catch (error) {
       logger.error('Trade execution failed:', error);
       throw error;

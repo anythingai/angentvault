@@ -171,7 +171,7 @@ type Query {
 
 ### REST Endpoints
 
-```
+``` text
 POST   /api/agents                 # Create new agent
 GET    /api/agents                 # List all agents
 GET    /api/agents/:id             # Get agent details
@@ -374,5 +374,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Pinata** for reliable IPFS storage services
 
 ---
-
-**Built with ❤️ for the future of autonomous finance**

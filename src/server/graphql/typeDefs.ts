@@ -4,6 +4,34 @@ export const typeDefs = gql`
   scalar JSON
   scalar DateTime
 
+  enum AgentStatus {
+    ACTIVE
+    PAUSED
+    STOPPED
+    ERROR
+  }
+
+  enum TradeStatus {
+    PENDING
+    EXECUTED
+    FAILED
+    CANCELLED
+  }
+
+  enum PaymentStatus {
+    PENDING
+    COMPLETED
+    FAILED
+    REFUNDED
+  }
+
+  enum PaymentType {
+    SUBSCRIPTION
+    AGENT_ACCESS
+    QUERY_FEE
+    REVENUE_SHARE
+  }
+
   type User {
     id: ID!
     email: String!
@@ -18,39 +46,83 @@ export const typeDefs = gql`
     id: ID!
     name: String!
     description: String!
-    status: String!
+    status: AgentStatus!
     config: JSON!
     performance: JSON
     createdAt: DateTime!
     updatedAt: DateTime!
   }
 
-  type MarketData {
+  type Trade {
+    id: ID!
+    agentId: ID!
+    type: String!
     symbol: String!
+    amount: Float!
     price: Float!
-    volume24h: Float!
-    change24h: Float!
-    changePercentage24h: Float!
-    marketCap: Float
-    timestamp: DateTime!
+    status: TradeStatus!
+    txHash: String
+    createdAt: DateTime!
+  }
+
+  type Payment {
+    id: ID!
+    userId: ID!
+    amount: Float!
+    currency: String!
+    type: PaymentType!
+    status: PaymentStatus!
+    transactionHash: String
+    createdAt: DateTime!
+  }
+
+  input CreateAgentInput {
+    name: String!
+    description: String!
+    config: JSON!
+  }
+
+  input ExecuteTradeInput {
+    agentId: ID!
+    type: String!
+    symbol: String!
+    amount: Float!
+    price: Float!
+    fromAsset: String!
+    toAsset: String!
+  }
+
+  input ProcessPaymentInput {
+    amount: Float!
+    currency: String!
+    type: PaymentType!
+    recipient: String!
+    metadata: JSON
+  }
+
+  type DeploymentResponse {
+    success: Boolean!
+    agent: Agent!
+    message: String!
   }
 
   type Query {
     me: User
     agents: [Agent!]!
     agent(id: ID!): Agent
-    marketData(symbol: String!): MarketData
+    marketData(symbol: String!): JSON
+    portfolio: JSON
   }
 
   type Mutation {
-    createAgent(name: String!, description: String!, config: JSON!): Agent!
-    updateAgent(id: ID!, name: String, description: String, config: JSON): Agent!
-    startAgent(id: ID!): Agent!
-    pauseAgent(id: ID!): Agent!
+    createAgent(input: CreateAgentInput!): Agent!
+    deployAgent(id: ID!): DeploymentResponse!
+    executeTrade(input: ExecuteTradeInput!): Trade!
+    processPayment(input: ProcessPaymentInput!): Payment!
   }
 
   type Subscription {
-    agentStatusChanged(userId: ID!): Agent!
-    marketDataUpdated(symbol: String!): MarketData!
+    agentStatusUpdated: Agent!
+    tradeExecuted: Trade!
   }
 `; 

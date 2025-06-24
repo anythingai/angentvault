@@ -10,7 +10,8 @@ services:
       - "4000:4000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:./prisma/dev.db
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/agentvault
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -27,6 +28,7 @@ services:
       - PINATA_GATEWAY_KEY=${PINATA_GATEWAY_KEY}
     depends_on:
       - redis
+      - postgres
     volumes:
       - ./prisma:/app/prisma
     restart: unless-stopped
@@ -40,5 +42,18 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agentvault
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
-  redis_data: 
+  redis_data:
+  postgres_data: 

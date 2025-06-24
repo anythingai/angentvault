@@ -18,6 +18,7 @@ COPY . .
 
 # Generate Prisma client
 RUN npx prisma generate
+RUN npx prisma db push --skip-generate
 
 # Build application
 RUN npm run build
@@ -50,5 +51,8 @@ EXPOSE 4000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
+ENV DATABASE_PROVIDER=sqlite
+ENV DATABASE_URL=file:./dev.db
+
 # Start both frontend and backend
-CMD ["sh", "-c", "node dist/server/index.js & node server.js"] 
+CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"] 

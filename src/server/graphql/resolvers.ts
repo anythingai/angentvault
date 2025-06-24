@@ -4,12 +4,67 @@ import { X402PayService } from '../services/X402PayService';
 import { db } from '../database';
 import { logger } from '../utils/logger';
 import { AgentStatus, TradeStatus, PaymentStatus } from '../../types';
+import { GraphQLScalarType, Kind } from 'graphql';
 
 const bedrockService = new BedrockService();
 const walletService = new CDPWalletService();
 const paymentService = new X402PayService();
 
+// Modify the JSON scalar implementation
+function parseAST(ast: any): any {
+  switch (ast.kind) {
+    case Kind.STRING:
+    case Kind.BOOLEAN:
+      return ast.value;
+    case Kind.INT:
+    case Kind.FLOAT:
+      return parseFloat(ast.value);
+    case Kind.OBJECT: {
+      const value: Record<string, any> = {};
+      ast.fields.forEach((field: any) => {
+        value[field.name.value] = parseAST(field.value);
+      });
+      return value;
+    }
+    case Kind.LIST:
+      return ast.values.map((n: any) => parseAST(n));
+    default:
+      return null;
+  }
+}
+
+const GraphQLJSON = new GraphQLScalarType({
+  name: 'JSON',
+  description: 'Arbitrary JSON value',
+  parseValue(value: unknown) {
+    return value as any;
+  },
+  serialize(value: unknown) {
+    return value as any;
+  },
+  parseLiteral(ast) {
+    return parseAST(ast);
+  },
+});
+
 export const resolvers = {
+  JSON: GraphQLJSON,
+  DateTime: new GraphQLScalarType({
+    name: 'DateTime',
+    description: 'Custom DateTime scalar type',
+    parseValue(value: unknown) {
+      return new Date(value as string | number | Date);
+    },
+    serialize(value: unknown) {
+      return (value as Date).toISOString();
+    },
+    parseLiteral(ast) {
+      if (ast.kind === Kind.STRING) {
+        return new Date(ast.value);
+      }
+      return null;
+    },
+  }),
   Query: {
     // Get all agents for a user
     agents: async (_: any, __: any, context: any) => {

@@ -28,6 +28,11 @@ interface Portfolio {
   }>;
 }
 
+interface GraphQLResponse<T> {
+  data?: T;
+  errors?: { message: string }[];
+}
+
 export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
@@ -41,48 +46,37 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
-      
-      // Mock data for demo purposes
-      const mockAgents: Agent[] = [
-        {
-          id: '1',
-          name: 'BTC Momentum Bot',
-          description: 'AI agent focused on Bitcoin momentum trading',
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          performance: {
-            totalTrades: 23,
-            winRate: 65.2,
-            totalReturn: 12.3
-          }
-        },
-        {
-          id: '2',
-          name: 'DeFi Yield Hunter',
-          description: 'Automated yield farming optimization agent',
-          status: 'PAUSED',
-          createdAt: new Date().toISOString(),
-          performance: {
-            totalTrades: 8,
-            winRate: 75.0,
-            totalReturn: 8.7
-          }
-        }
-      ];
 
-      const mockPortfolio: Portfolio = {
-        totalValue: 45250.32,
-        totalPnL: 3420.18,
-        pnlPercentage: 8.17,
-        assets: [
-          { symbol: 'BTC', amount: 0.5, value: 22500, change24h: 2.3 },
-          { symbol: 'ETH', amount: 8.2, value: 18750, change24h: -1.2 },
-          { symbol: 'USDC', amount: 4000.32, value: 4000.32, change24h: 0.0 }
-        ]
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
       };
+      if (token) headers.Authorization = `Bearer ${token}`;
 
-      setAgents(mockAgents);
-      setPortfolio(mockPortfolio);
+      // Fetch agents and portfolio via GraphQL
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const query = `
+        query Dashboard {
+          agents { id name description status createdAt }
+          portfolio
+        }
+      `;
+
+      const resp = await fetch(`${apiUrl}/graphql`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query }),
+        credentials: 'include',
+      });
+
+      const json: GraphQLResponse<{ agents: Agent[]; portfolio: Portfolio }> = await resp.json();
+
+      if (json.errors) {
+        throw new Error(json.errors[0].message);
+      }
+
+      setAgents(json.data?.agents || []);
+      setPortfolio(json.data?.portfolio || null);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
