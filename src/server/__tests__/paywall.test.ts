@@ -2,6 +2,14 @@ import express from 'express';
 import request from 'supertest';
 import { paywallMiddleware } from '../middleware/paywall';
 
+// Mock Redis
+jest.mock('../redis', () => ({
+  redis: {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+  },
+}));
+
 // Mock X402PayService so we control payment status
 jest.mock('../services/X402PayService', () => {
   return {

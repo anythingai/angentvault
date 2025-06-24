@@ -60,6 +60,16 @@ export const paywallMiddleware = () => {
       // Attach payment data to request for downstream handlers
       (req as any).payment = payment;
 
+      // Only allow access if payment is completed
+      if (payment.status !== 'COMPLETED') {
+        return res.status(402).json({
+          success: false,
+          error: 'Payment required',
+          message: 'Payment is not completed',
+          paymentStatus: payment.status,
+        });
+      }
+
       next();
     } catch (error) {
       logger.error('Paywall middleware error', error);
