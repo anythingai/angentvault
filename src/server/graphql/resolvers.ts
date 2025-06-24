@@ -136,15 +136,8 @@ export const resolvers = {
     },
 
     // Get market data
-    marketData: async (_: any, { symbol }: { symbol: string }) => {
-      try {
-        return await db.marketData.findUnique({
-          where: { symbol },
-        });
-      } catch (error) {
-        logger.error('Failed to fetch market data:', error);
-        throw error;
-      }
+    marketData: async (_: any, { symbol }: { symbol: string }, { dataSources }: any) => {
+      return dataSources.marketDataAPI.getMarketData(symbol);
     },
 
     // Get current user
@@ -160,6 +153,17 @@ export const resolvers = {
         logger.error('Failed to fetch user:', error);
         throw error;
       }
+    },
+
+    agentDecision: async (_: any, { symbol }: { symbol: string }, { services }: any) => {
+      const decision = await services.bedrock.generateAgentDecision(symbol);
+      // Bedrock returns full message; try to find "simple_decision" tool output if present
+      const content = decision?.tool ?? decision;
+      return {
+        symbol: content.symbol,
+        side: content.side,
+        confidence: content.confidence,
+      };
     },
   },
 
@@ -239,99 +243,63 @@ export const resolvers = {
     },
 
     // Execute trade
-    executeTrade: async (_: any, { input }: any, context: any) => {
-      try {
-        const userId = context.user?.id;
-        if (!userId) throw new Error('Not authenticated');
+    executeTrade: async (_: any, { input }: any, { services, user }: any) => {
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
 
-        // Create trade record
-        const trade = await db.trade.create({
+      const { fromAsset, toAsset, amount, type } = input;
+
+      const result = await services.wallet.executeTrade(
+        user.id,
+        fromAsset,
+        toAsset,
+        amount,
+        type
+      );
+
+      // Persist trade to database
+      const trade = await db.trade.create({
+        data: {
+          agentId: input.agentId ?? '',
+          type,
+          symbol: `${fromAsset}/${toAsset}`,
+          amount,
+          price: 0,
+          status: TradeStatus.EXECUTED,
+          txHash: result.transactionHash,
+        },
+      });
+
+      // Pin trade record to IPFS via Pinata
+      try {
+        const pinRes = await services.pinata.uploadJSON({
+          trade,
+          executedAt: new Date().toISOString(),
+        }, `trade-${trade.id}.json`);
+
+        await db.ipfsData.create({
           data: {
-            agentId: input.agentId,
-            type: input.type,
-            symbol: input.symbol,
-            amount: input.amount,
-            price: input.price,
-            status: TradeStatus.PENDING,
+            agentId: trade.agentId,
+            hash: pinRes.ipfsHash,
+            type: 'TRADING_HISTORY',
+            fileName: `trade-${trade.id}.json`,
           },
         });
-
-        // Execute trade through CDP Wallet
-        try {
-          const result = await walletService.executeTrade(
-            userId,
-            input.fromAsset,
-            input.toAsset,
-            input.amount,
-            input.type
-          );
-
-          // Update trade with success
-          const updatedTrade = await db.trade.update({
-            where: { id: trade.id },
-            data: {
-              status: TradeStatus.EXECUTED,
-              txHash: result.transactionHash,
-            },
-          });
-
-          logger.info('Trade executed:', { tradeId: trade.id, txHash: result.transactionHash });
-          return updatedTrade;
-        } catch (tradeError) {
-          // Update trade with failure
-          await db.trade.update({
-            where: { id: trade.id },
-            data: { status: TradeStatus.FAILED },
-          });
-          throw tradeError;
-        }
-      } catch (error) {
-        logger.error('Failed to execute trade:', error);
-        throw error;
+      } catch (pinErr) {
+        logger.error('Failed to pin trade to Pinata', pinErr);
       }
+
+      return trade;
     },
 
     // Process payment
-    processPayment: async (_: any, { input }: any, context: any) => {
-      try {
-        const userId = context.user?.id;
-        if (!userId) throw new Error('Not authenticated');
-
-        // Create payment record
-        const payment = await db.payment.create({
-          data: {
-            userId,
-            amount: input.amount,
-            currency: input.currency,
-            type: input.type,
-            status: PaymentStatus.PENDING,
-            metadata: JSON.stringify(input.metadata),
-          },
-        });
-
-        // Process through x402pay
-        const paymentRequest = await paymentService.createPaymentRequest({
-          amount: input.amount,
-          currency: input.currency,
-          recipient: input.recipient,
-          metadata: {
-            paymentId: payment.id,
-            ...input.metadata,
-          },
-        });
-
-        // Update payment with x402pay ID
-        const updatedPayment = await db.payment.update({
-          where: { id: payment.id },
-          data: { x402payId: paymentRequest.id },
-        });
-
-        logger.info('Payment processed:', { paymentId: payment.id, x402payId: paymentRequest.id });
-        return updatedPayment;
-      } catch (error) {
-        logger.error('Failed to process payment:', error);
-        throw error;
+    processPayment: async (_: any, { input }: any, { services, user }: any) => {
+      if (!user) {
+        throw new Error('Not authenticated');
       }
+
+      return services.x402pay.createPaymentRequest(input);
     },
   },
 

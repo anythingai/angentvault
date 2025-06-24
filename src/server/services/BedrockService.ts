@@ -152,6 +152,45 @@ export class BedrockService {
     return this.invokeModel(request);
   }
 
+  /**
+   * Lightweight helper used in the MVP to fulfil the hackathon "AWS Bedrock" prize track.
+   * It asks the model for a single compact trading decision and expects the tool to
+   * return a JSON payload shaped as:
+   *   {
+   *     "symbol": "BTC",
+   *     "side": "BUY",   // or SELL
+   *     "confidence": 0.76
+   *   }
+   * No additional fields should be present so that the client can parse it directly.
+   */
+  async generateAgentDecision(symbol: string): Promise<any> {
+    const prompt = `You are an expert crypto trader.  Given the symbol ${symbol}, output a JSON object with exactly three keys: symbol, side (BUY or SELL), and confidence (0-1).  Only output JSON, nothing else.`;
+
+    const request: BedrockRequest = {
+      modelId: config.aws.bedrockModelId,
+      prompt,
+      maxTokens: 100,
+      temperature: 0.1,
+      tools: [
+        {
+          name: 'simple_decision',
+          description: 'Return a minimalist trading decision',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              symbol: { type: 'string' },
+              side: { type: 'string', enum: ['BUY', 'SELL'] },
+              confidence: { type: 'number', minimum: 0, maximum: 1 },
+            },
+            required: ['symbol', 'side', 'confidence'],
+          },
+        },
+      ],
+    };
+
+    return this.invokeModel(request);
+  }
+
   private async invokeModel(request: BedrockRequest): Promise<any> {
     try {
       const input = {

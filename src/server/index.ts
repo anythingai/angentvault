@@ -92,14 +92,24 @@ async function startServer() {
   app.use('/api/market', marketRoutes);
   app.use('/api/payments', authMiddleware, paymentRoutes);
 
+  // Instantiate long-lived service objects once
+  const services = {
+    bedrock: new (await import('./services/BedrockService')).BedrockService(),
+    x402pay: new (await import('./services/X402PayService')).X402PayService(),
+    wallet: new (await import('./services/CDPWalletService')).CDPWalletService(),
+    pinata: new (await import('./services/PinataService')).PinataService(),
+    // Lazy-load other services as needed
+  };
+
   // GraphQL setup
   const server = new ApolloServer({
     typeDefs,
     resolvers,
     context: ({ req }) => {
-      // Extract user from JWT token for GraphQL context
+      // Make user & services available to resolvers
       return {
-        user: req.user || null,
+        user: (req as any).user || null,
+        services,
       };
     },
     introspection: process.env.NODE_ENV !== 'production',

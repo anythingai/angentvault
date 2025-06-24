@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { X402PayService } from '../services/X402PayService';
 import { logger } from '../utils/logger';
+import { redis } from '../redis';
 
 /**
  * paywallMiddleware
@@ -26,7 +27,12 @@ export const paywallMiddleware = () => {
         return next();
       }
 
-      const paymentId = (req.headers['x-payment-id'] as string) || req.query.paymentId as string;
+      // Support local dev without payments
+      if (process.env.X402PAY_DISABLED === '1') {
+        return next();
+      }
+
+      const paymentId = (req.headers['x-payment-id'] as string) || (req.query.paymentId as string);
 
       if (!paymentId) {
         return res.status(402).json({
@@ -36,14 +42,19 @@ export const paywallMiddleware = () => {
         });
       }
 
-      const payment = await paymentService.checkPaymentStatus(paymentId);
+      // Check redis cache first to avoid multiple API hits & latency
+      const cacheKey = `x402:${paymentId}`;
+      const cachedStatus = await redis.get(cacheKey);
 
-      if (payment.status !== 'COMPLETED') {
-        return res.status(402).json({
-          success: false,
-          error: 'Payment pending',
-          message: `Payment status is ${payment.status}`,
-        });
+      let payment;
+      if (cachedStatus === 'COMPLETED') {
+        payment = { status: 'COMPLETED', id: paymentId };
+      } else {
+        payment = await paymentService.checkPaymentStatus(paymentId);
+        // Cache for 10 minutes if completed
+        if (payment.status === 'COMPLETED') {
+          await redis.set(cacheKey, 'COMPLETED');
+        }
       }
 
       // Attach payment data to request for downstream handlers

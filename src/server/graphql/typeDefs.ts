@@ -111,6 +111,7 @@ export const typeDefs = gql`
     agents: [Agent!]!
     agent(id: ID!): Agent
     marketData(symbol: String!): JSON
+    agentDecision(symbol: String!): AgentDecision!
     portfolio: JSON
   }
 
@@ -124,5 +125,12 @@ export const typeDefs = gql`
   type Subscription {
     agentStatusUpdated: Agent!
     tradeExecuted: Trade!
+  }
+
+  # Minimalist trading decision produced by Bedrock
+  type AgentDecision {
+    symbol: String!
+    side: String!
+    confidence: Float!
   }
 `; 
