@@ -9,38 +9,37 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         node-version: [18.x]
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js ${{ matrix.node-version }}
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Lint
         run: npm run lint
 
-      - name: Type Check
+      - name: Type check
         run: npm run type-check
 
-      - name: Unit Tests
-        run: npm test
+      - name: Run unit tests
+        run: npm run test -- --coverage
 
       - name: Build
         run: npm run build
 
-      - name: Docker Build
-        run: npm run docker:build
+      - name: Docker build
+        run: docker build -t agentvault:ci .
+        if: github.event_name == 'push'
 
       - name: Audit (prod dependencies)
         run: npm run audit:prod

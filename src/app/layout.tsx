@@ -9,9 +9,14 @@ export const metadata: Metadata = {
   description: 'AI-powered autonomous cryptocurrency investment agents - Built for Coinbase Agents in Action Hackathon',
   keywords: ['crypto', 'AI', 'autonomous', 'investment', 'DeFi', 'blockchain'],
   authors: [{ name: 'AgentVault Team' }],
-  viewport: 'width=device-width, initial-scale=1',
-  themeColor: '#3b82f6',
 }
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
+
+export const themeColor = '#3b82f6';
 
 export default function RootLayout({
   children,

@@ -6,7 +6,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { typeDefs } from './graphql/typeDefs';
 import { resolvers } from './graphql/resolvers';
-import { connectDatabase } from './database';
+import { connectDatabase, disconnectDatabase } from './database';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { authMiddleware } from './middleware/auth';
@@ -17,6 +17,8 @@ import { ApolloServerPluginLandingPageProductionDefault } from 'apollo-server-co
 import { redis } from './redis';
 import { metricsRouter } from './metrics';
 import { metricsMiddleware } from './middleware/metrics';
+import depthLimit from 'graphql-depth-limit';
+import { createComplexityLimitRule } from 'graphql-validation-complexity';
 
 // Import route handlers
 import authRoutes from './routes/auth';
@@ -34,9 +36,11 @@ async function startServer() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'"],
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
       },
     },
   }));
@@ -71,10 +75,13 @@ async function startServer() {
   app.get('/health', async (req, res) => {
     try {
       // You could add more health checks here (Redis, external APIs, etc.)
+      const redisHealthy = await redis.healthCheck();
+
       res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
         database: 'connected',
+        redis: redisHealthy ? 'connected' : 'unhealthy',
         version: process.env.npm_package_version || '1.0.0',
       });
     } catch (error) {
@@ -114,6 +121,13 @@ async function startServer() {
     },
     introspection: process.env.NODE_ENV !== 'production',
     plugins: process.env.NODE_ENV === 'production' ? [ApolloServerPluginLandingPageProductionDefault()] : [],
+    validationRules: [
+      depthLimit(10),
+      createComplexityLimitRule(1000, {
+        onCost: (cost) => logger.debug(`GraphQL query complexity: ${cost}`),
+        formatErrorMessage: (cost) => `Query is too complex: ${cost}.`,
+      }),
+    ],
   });
 
   // Apply paywall to GraphQL endpoint
@@ -151,7 +165,9 @@ async function startServer() {
   // Graceful shutdown
   process.on('SIGTERM', async () => {
     logger.info('SIGTERM received, shutting down gracefully...');
-    httpServer.close(() => {
+    httpServer.close(async () => {
+      await redis.disconnect();
+      await disconnectDatabase();
       logger.info('Server closed');
       process.exit(0);
     });
@@ -159,7 +175,9 @@ async function startServer() {
 
   process.on('SIGINT', async () => {
     logger.info('SIGINT received, shutting down gracefully...');
-    httpServer.close(() => {
+    httpServer.close(async () => {
+      await redis.disconnect();
+      await disconnectDatabase();
       logger.info('Server closed');
       process.exit(0);
     });
