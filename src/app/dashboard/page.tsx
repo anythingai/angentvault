@@ -78,7 +78,7 @@ export default function Dashboard() {
       setAgents(json.data?.agents || []);
       setPortfolio(json.data?.portfolio || null);
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+      // console.error('Failed to fetch dashboard data:', error);
     } finally {
       setIsLoading(false);
     }

@@ -17,22 +17,18 @@
     }
   },
   "include": [
-    "src/server/index.ts",
-    "src/server/utils/**/*",
-    "src/types/**/*"
+    "src/server/**/*.ts",
+    "src/types/**/*.ts"
   ],
   "exclude": [
-    "src/server/services/**/*",
-    "src/server/routes/**/*",
-    "src/server/graphql/**/*",
-    "src/server/websocket/**/*",
-    "src/server/middleware/**/*", 
-    "src/server/database/**/*",
-    "src/server/redis/**/*",
+    "node_modules",
+    "dist",
+    "src/app/**/*",
     "src/components/**/*",
     "src/pages/**/*",
-    "src/app/**/*",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    ".next",
+    "cypress"
   ]
 } 

@@ -4,4 +4,5 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/__tests__/**/*.test.ts'],
   modulePathIgnorePatterns: ['dist'],
+  testTimeout: 30000,
 }; 

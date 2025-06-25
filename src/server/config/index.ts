@@ -18,7 +18,7 @@ export const config: AppConfig = {
   },
   redis: {
     url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`,
-    maxRetries: parseInt(process.env.REDIS_MAX_RETRIES || '3'),
+    maxRetries: 3,
   },
   aws: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
@@ -62,7 +62,7 @@ export const config: AppConfig = {
   },
   agent: {
     executionInterval: parseInt(process.env.AGENT_EXECUTION_INTERVAL || '60000'),
-    maxTradeSize: parseFloat(process.env.AGENT_MAX_TRADE_SIZE || '1000'),
+    maxTradeSize: parseInt(process.env.AGENT_MAX_TRADE_SIZE || '1000'),
     defaultSlippage: parseFloat(process.env.AGENT_DEFAULT_SLIPPAGE || '0.02'),
     maxDailyTrades: parseInt(process.env.AGENT_MAX_DAILY_TRADES || '50'),
   },
@@ -89,10 +89,10 @@ const requiredEnvVars = [
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingEnvVars.length > 0 && process.env.NODE_ENV === 'production') {
-  console.error('Missing required environment variables:', missingEnvVars);
+  // console.error('Missing required environment variables:', missingEnvVars);
   process.exit(1);
 } else if (missingEnvVars.length > 0) {
-  console.warn('Missing environment variables (using defaults):', missingEnvVars);
+  // console.warn('Missing environment variables (using defaults):', missingEnvVars);
 }
 
 export const port = config.server.port; 

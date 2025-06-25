@@ -33,7 +33,7 @@ module.exports = {
     '@typescript-eslint/no-var-requires': 'off', // Allow require
     'react/react-in-jsx-scope': 'off',
     'react/prop-types': 'off',
-    'no-console': 'off', // Allow console for now
+    'no-console': 'warn',
     'no-var': 'warn', // Changed to warn
     'react-hooks/exhaustive-deps': 'warn',
   },
@@ -42,7 +42,6 @@ module.exports = {
     'dist/',
     '.next/',
     'coverage/',
-    '*.config.js',
     '*.config.ts',
   ],
 }; 

@@ -4,7 +4,8 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 import { db } from '../database';
 
-interface MarketTicker {
+// Move interfaces to avoid export conflicts
+type MarketTicker = {
   symbol: string;
   price: number;
   volume24h: number;
@@ -12,9 +13,9 @@ interface MarketTicker {
   changePercentage24h: number;
   marketCap?: number;
   lastUpdated: Date;
-}
+};
 
-interface CandlestickData {
+type CandlestickData = {
   symbol: string;
   timestamp: Date;
   open: number;
@@ -23,7 +24,7 @@ interface CandlestickData {
   close: number;
   volume: number;
   interval: string;
-}
+};
 
 export class MarketDataService extends EventEmitter {
   private coinbaseWs: WebSocket | null = null;

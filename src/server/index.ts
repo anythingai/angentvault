@@ -5,7 +5,7 @@ import { WebSocketServer } from 'ws';
 import cors from 'cors';
 import helmet from 'helmet';
 import { typeDefs } from './graphql/typeDefs';
-import { resolvers } from './graphql/resolvers';
+import resolvers from './graphql/resolvers';
 import { connectDatabase, disconnectDatabase } from './database';
 import { config } from './config';
 import { logger } from './utils/logger';

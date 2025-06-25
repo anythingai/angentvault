@@ -1,0 +1,142 @@
+---
+version: "2.0"
+
+services:
+  web:
+    image: agentvault/webapp:latest
+    expose:
+      - port: 3000
+        as: 80
+        to:
+          - global: true
+    env:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://api.agentvault.ai
+    depends_on:
+      - api
+
+  api:
+    image: agentvault/api:latest
+    expose:
+      - port: 4000
+        as: 4000
+        to:
+          - global: true
+    env:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - CDP_API_KEY=${CDP_API_KEY}
+      - CDP_PRIVATE_KEY=${CDP_PRIVATE_KEY}
+      - X402_PAY_API_KEY=${X402_PAY_API_KEY}
+      - X402_PAY_SECRET_KEY=${X402_PAY_SECRET_KEY}
+      - X402_PAY_WEBHOOK_SECRET=${X402_PAY_WEBHOOK_SECRET}
+      - PINATA_API_KEY=${PINATA_API_KEY}
+      - PINATA_SECRET_API_KEY=${PINATA_SECRET_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - redis
+      - postgres
+
+  redis:
+    image: redis:7-alpine
+    expose:
+      - port: 6379
+        to:
+          - service: api
+
+  postgres:
+    image: postgres:15-alpine
+    expose:
+      - port: 5432
+        to:
+          - service: api
+    env:
+      - POSTGRES_USER=agentvault
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=agentvault
+    params:
+      storage:
+        mount: /var/lib/postgresql/data
+        readOnly: false
+
+profiles:
+  compute:
+    web:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          size: 1Gi
+    api:
+      resources:
+        cpu:
+          units: 1
+        memory:
+          size: 1Gi
+        storage:
+          size: 2Gi
+    redis:
+      resources:
+        cpu:
+          units: 0.25
+        memory:
+          size: 256Mi
+        storage:
+          size: 512Mi
+    postgres:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          size: 5Gi
+
+  placement:
+    dcloud:
+      attributes:
+        host: akash
+      signedBy:
+        anyOf:
+          - "akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63"
+          - "akash18qa2a2ltfyvkyj0ggj3hkvuj6twzyumuaru9s4"
+      pricing:
+        web:
+          denom: uakt
+          amount: 100
+        api:
+          denom: uakt
+          amount: 200
+        redis:
+          denom: uakt
+          amount: 50
+        postgres:
+          denom: uakt
+          amount: 100
+
+deployment:
+  web:
+    dcloud:
+      profile: web
+      count: 1
+  api:
+    dcloud:
+      profile: api
+      count: 1
+  redis:
+    dcloud:
+      profile: redis
+      count: 1
+  postgres:
+    dcloud:
+      profile: postgres
+      count: 1 
