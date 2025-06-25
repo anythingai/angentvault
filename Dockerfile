@@ -35,6 +35,10 @@ RUN npx prisma generate
 # Build application
 RUN npm run build
 
+# Verify standalone build output exists
+RUN ls -la .next/
+RUN ls -la .next/standalone/ || echo "Standalone directory not found"
+
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
@@ -44,10 +48,14 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy the standalone build
+# Copy the standalone build and static files
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+
+# Copy public directory (create empty one if it doesn't exist)
 COPY --from=builder /app/public ./public
+
+# Copy additional required files
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
 

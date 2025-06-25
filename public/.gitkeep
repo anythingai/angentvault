@@ -1,0 +1,2 @@
+# This file ensures the public directory is tracked in git
+# and provides a location for static assets like images, icons, etc. 
