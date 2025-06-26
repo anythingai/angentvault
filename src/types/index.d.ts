@@ -69,8 +69,8 @@ export interface Trade {
     createdAt: Date;
 }
 export declare enum TradeType {
-    BUY = "buy",
-    SELL = "sell"
+    BUY = "BUY",
+    SELL = "SELL"
 }
 export declare enum TradeStatus {
     PENDING = "pending",
@@ -135,16 +135,16 @@ export interface Payment {
     createdAt: Date;
 }
 export declare enum PaymentType {
-    SUBSCRIPTION = "subscription",
-    AGENT_ACCESS = "agent_access",
-    QUERY_FEE = "query_fee",
-    REVENUE_SHARE = "revenue_share"
+    SUBSCRIPTION = "SUBSCRIPTION",
+    AGENT_ACCESS = "AGENT_ACCESS",
+    QUERY_FEE = "QUERY_FEE",
+    REVENUE_SHARE = "REVENUE_SHARE"
 }
 export declare enum PaymentStatus {
-    PENDING = "pending",
-    COMPLETED = "completed",
-    FAILED = "failed",
-    REFUNDED = "refunded"
+    PENDING = "PENDING",
+    COMPLETED = "COMPLETED",
+    FAILED = "FAILED",
+    REFUNDED = "REFUNDED"
 }
 export interface AIAnalysis {
     id: string;
@@ -193,7 +193,7 @@ export interface BedrockRequest {
     prompt: string;
     maxTokens: number;
     temperature: number;
-    tools?: BedrockTool[];
+    tools?: any[];
 }
 export interface BedrockTool {
     name: string;
@@ -204,7 +204,7 @@ export interface X402PayRequest {
     amount: number;
     currency: string;
     recipient: string;
-    metadata?: Record<string, any>;
+    metadata?: any;
 }
 export interface PinataUploadResponse {
     IpfsHash: string;

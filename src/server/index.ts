@@ -63,12 +63,12 @@ async function startServer() {
     process.exit(1);
   }
 
-  // Connect to Redis
+  // Connect to Redis (graceful fallback to memory cache)
   try {
     await redis.connect();
   } catch (error) {
-    logger.error('Failed to connect to Redis, exiting...');
-    process.exit(1);
+    logger.warn('Redis connection failed, continuing with memory cache fallback:', error);
+    // Continue without Redis - the service has memory cache fallback
   }
 
   // Health check endpoint

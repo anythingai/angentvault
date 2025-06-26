@@ -4,17 +4,37 @@ import { logger } from '../utils/logger';
 import { WalletBalance, TradeType } from '../../types';
 
 export class CDPWalletService {
-  private coinbase: Coinbase;
+  private coinbase: Coinbase | null = null;
 
   constructor() {
+    try {
+      // Initialize CDP SDK
     this.coinbase = new Coinbase({
-      apiKeyName: config.cdp.apiKeyName,
-      privateKey: config.cdp.privateKey,
+        apiKeyName: config.cdp.apiKeyName || 'demo-key',
+        privateKey: config.cdp.privateKey || 'demo-private-key',
     });
+    } catch (error) {
+      logger.warn('CDP SDK initialization failed, running in demo mode:', error);
+      this.coinbase = null;
+    }
   }
 
-  async createWallet(userId: string): Promise<Wallet> {
+  async createWallet(userId: string): Promise<Wallet | any> {
     try {
+      if (!this.coinbase) {
+        // Demo mode - return mock wallet
+        const mockWallet = {
+          getId: () => `demo-wallet-${userId}`,
+          getDefaultAddress: () => ({ getId: () => `demo-address-${userId}` }),
+          export: () => ({ id: `demo-wallet-${userId}` }),
+        };
+        
+        await this.storeWalletData(userId, mockWallet.export());
+        
+        logger.info('Demo wallet created', { userId });
+        return mockWallet as any;
+      }
+
       const wallet = await Wallet.create();
       
       // Store wallet data for user
@@ -54,7 +74,19 @@ export class CDPWalletService {
     }
   }
 
-  async getOrCreateWallet(userId: string): Promise<Wallet> {
+  async getOrCreateWallet(userId: string): Promise<any> {
+    if (!this.coinbase) {
+      // Demo mode
+      return {
+        getId: () => `demo-wallet-${userId}`,
+        listBalances: () => new Map(),
+        createTrade: () => ({ wait: async () => {}, getTransaction: () => ({ getTransactionHash: () => 'demo-tx' }) }),
+        createTransfer: () => ({ wait: async () => {}, getTransaction: () => ({ getTransactionHash: () => 'demo-tx' }) }),
+        deployContract: () => ({ wait: async () => {}, getContractAddress: () => 'demo-contract', getTransaction: () => ({ getTransactionHash: () => 'demo-tx' }) }),
+        listTransactions: () => [],
+      };
+    }
+
     let wallet = await this.importWallet(userId);
     
     if (!wallet) {
@@ -66,6 +98,22 @@ export class CDPWalletService {
 
   async getBalance(userId: string, asset?: string): Promise<WalletBalance[]> {
     try {
+      if (!this.coinbase) {
+        // Demo mode - return mock balances
+        const mockBalances: WalletBalance[] = [
+          { asset: 'USDC', balance: 1000, balanceUSD: 1000 },
+          { asset: 'BTC', balance: 0.02, balanceUSD: 900 },
+          { asset: 'ETH', balance: 0.5, balanceUSD: 1500 },
+        ];
+        
+        const filteredBalances = asset 
+          ? mockBalances.filter(b => b.asset === asset)
+          : mockBalances;
+          
+        logger.info('Demo balance retrieved', { userId, balances: filteredBalances });
+        return filteredBalances;
+      }
+
       const wallet = await this.getOrCreateWallet(userId);
       const balances = await wallet.listBalances();
 

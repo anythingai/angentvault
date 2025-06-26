@@ -182,7 +182,7 @@ const resolvers = {
 
         const walletService = new CDPWalletService();
         const balances = await walletService.getBalance(userId);
-        
+
         const totalValue = balances.reduce((sum, b) => sum + b.balanceUSD, 0);
         const assets = balances.map(b => ({
           symbol: b.asset,
@@ -287,7 +287,7 @@ const resolvers = {
           where: { id },
           data: { status: 'PAUSED' }
         });
-
+        
         return {
           ...updatedAgent,
           config: typeof updatedAgent.config === 'string' ? JSON.parse(updatedAgent.config) : updatedAgent.config || {},
@@ -352,6 +352,6 @@ const resolvers = {
       },
     },
   },
-};
+}; 
 
 export default resolvers; 
