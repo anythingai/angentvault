@@ -76,46 +76,10 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
-  type MarketData {
-    symbol: String!
-    price: Float!
-    volume24h: Float!
-    change24h: Float!
-    changePercentage24h: Float!
-    marketCap: Float
-    lastUpdated: DateTime!
-  }
-
-  type IntegrationStatus {
-    status: String!
-    message: String!
-  }
-
-  type HackathonSummary {
-    readyForDemo: Boolean!
-    totalIntegrations: Int!
-    message: String
-  }
-
-  type HackathonIntegrations {
-    bedrock: IntegrationStatus!
-    cdpWallet: IntegrationStatus!
-    x402pay: IntegrationStatus!
-    pinata: IntegrationStatus!
-    marketData: IntegrationStatus!
-    summary: HackathonSummary!
-  }
-
-  type HackathonDemo {
-    timestamp: String!
-    integrations: HackathonIntegrations!
-  }
-
   input CreateAgentInput {
     name: String!
     description: String!
     config: JSON!
-    ownerId: String
   }
 
   input ExecuteTradeInput {
@@ -144,22 +108,45 @@ export const typeDefs = gql`
 
   type Query {
     hello: String!
-    hackathonDemo: HackathonDemo!
+    hackathonDemo: HackathonDemoResponse!
     me: User
     agents: [Agent!]!
     agent(id: ID!): Agent
-    marketData(symbols: [String!]!): [MarketData!]!
+    marketData(symbols: [String!]!): [JSON!]!
+    agentDecision(symbol: String!): AgentDecision!
     portfolio: JSON
+  }
+
+  type HackathonDemoResponse {
+    timestamp: DateTime!
+    integrations: HackathonIntegrations!
+  }
+
+  type HackathonIntegrations {
+    bedrock: IntegrationStatus!
+    cdpWallet: IntegrationStatus!
+    x402pay: IntegrationStatus!
+    pinata: IntegrationStatus!
+    marketData: IntegrationStatus!
+    summary: IntegrationSummary!
+  }
+
+  type IntegrationStatus {
+    status: String!
+    message: String!
+  }
+
+  type IntegrationSummary {
+    totalIntegrations: Int!
+    readyForDemo: Boolean!
+    message: String!
   }
 
   type Mutation {
     createAgent(input: CreateAgentInput!): Agent!
-    startAgent(id: ID!): Agent!
-    stopAgent(id: ID!): Agent!
     deployAgent(id: ID!): DeploymentResponse!
     executeTrade(input: ExecuteTradeInput!): Trade!
     processPayment(input: ProcessPaymentInput!): Payment!
-    executePayment(agentId: String!, amount: Float!): Payment!
   }
 
   type Subscription {

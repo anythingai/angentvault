@@ -1,27 +1,42 @@
-import { Coinbase, Wallet } from '@coinbase/cdp-sdk';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { WalletBalance, TradeType } from '../../types';
 
+// Try different import approach for CDP SDK
+let Coinbase: any;
+let Wallet: any;
+try {
+  const cdpSdk = require('@coinbase/cdp-sdk');
+  Coinbase = cdpSdk.Coinbase;
+  Wallet = cdpSdk.Wallet;
+} catch (e) {
+  logger.warn('CDP SDK module not found, will use demo mode');
+}
+
 export class CDPWalletService {
-  private coinbase: Coinbase | null = null;
+  private coinbase: any = null;
 
   constructor() {
     try {
       // Initialize CDP SDK
+      if (Coinbase) {
     this.coinbase = new Coinbase({
         apiKeyName: config.cdp.apiKeyName || 'demo-key',
         privateKey: config.cdp.privateKey || 'demo-private-key',
     });
+      } else {
+        logger.warn('CDP SDK not available, running in demo mode');
+        this.coinbase = null;
+      }
     } catch (error) {
       logger.warn('CDP SDK initialization failed, running in demo mode:', error);
       this.coinbase = null;
     }
   }
 
-  async createWallet(userId: string): Promise<Wallet | any> {
+  async createWallet(userId: string): Promise<any> {
     try {
-      if (!this.coinbase) {
+      if (!this.coinbase || !Wallet) {
         // Demo mode - return mock wallet
         const mockWallet = {
           getId: () => `demo-wallet-${userId}`,
@@ -32,7 +47,7 @@ export class CDPWalletService {
         await this.storeWalletData(userId, mockWallet.export());
         
         logger.info('Demo wallet created', { userId });
-        return mockWallet as any;
+        return mockWallet;
       }
 
       const wallet = await Wallet.create();
@@ -53,7 +68,7 @@ export class CDPWalletService {
     }
   }
 
-  async importWallet(userId: string): Promise<Wallet | null> {
+  async importWallet(userId: string): Promise<any> {
     try {
       const walletData = await this.getWalletData(userId);
       if (!walletData) {

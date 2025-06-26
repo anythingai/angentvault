@@ -1,230 +1,379 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import dynamic from 'next/dynamic';
+import AgentCards from '../components/AgentCards';
 
-interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  status: 'ACTIVE' | 'PAUSED' | 'ERROR';
-  createdAt: string;
-  performance?: {
-    totalTrades: number;
-    winRate: number;
-    totalReturn: number;
-  };
-}
+// Dynamically import chart components to avoid SSR issues
+const DynamicPortfolioChart = dynamic(() => import('../components/PortfolioChart'), {
+  ssr: false,
+  loading: () => <div className="crypto-card p-6 animate-pulse"><div className="h-64 bg-gray-700 rounded"></div></div>
+});
 
-interface Portfolio {
-  totalValue: number;
+interface DashboardStats {
+  totalPortfolioValue: number;
   totalPnL: number;
   pnlPercentage: number;
-  assets: Array<{
-    symbol: string;
-    amount: number;
-    value: number;
-    change24h: number;
-  }>;
+  activeAgents: number;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  totalTrades: number;
+  successRate: number;
 }
 
-interface GraphQLResponse<T> {
-  data?: T;
-  errors?: { message: string }[];
+interface MarketAlert {
+  id: string;
+  type: 'opportunity' | 'warning' | 'info';
+  title: string;
+  message: string;
+  timestamp: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+interface RecentActivity {
+  id: string;
+  type: 'trade' | 'payment' | 'agent_action' | 'revenue';
+  title: string;
+  description: string;
+  amount?: number;
+  timestamp: string;
+  status: 'success' | 'pending' | 'failed';
 }
 
 export default function Dashboard() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [marketAlerts, setMarketAlerts] = useState<MarketAlert[]>([]);
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
     fetchDashboardData();
+    
+    // Set up real-time updates
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchDashboardData = async () => {
     try {
-      setIsLoading(true);
-
-      const token = localStorage.getItem('token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+      // Mock API calls - replace with actual GraphQL queries
+      const mockStats: DashboardStats = {
+        totalPortfolioValue: 25000 + Math.random() * 1000 - 500,
+        totalPnL: 2100 + Math.random() * 200 - 100,
+        pnlPercentage: 9.2 + Math.random() * 2 - 1,
+        activeAgents: 3,
+        totalRevenue: 127.45,
+        monthlyRevenue: 42.80,
+        totalTrades: 247,
+        successRate: 87.5
       };
-      if (token) headers.Authorization = `Bearer ${token}`;
 
-      // Fetch agents and portfolio via GraphQL
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const query = `
-        query Dashboard {
-          agents { id name description status createdAt }
-          portfolio
+      const mockAlerts: MarketAlert[] = [
+        {
+          id: '1',
+          type: 'opportunity',
+          title: 'High Yield Opportunity Detected',
+          message: 'DeFi protocol offering 15.2% APY on USDC staking',
+          timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+          priority: 'high'
+        },
+        {
+          id: '2',
+          type: 'warning',
+          title: 'Market Volatility Alert',
+          message: 'BTC showing increased volatility, consider reducing position size',
+          timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+          priority: 'medium'
         }
-      `;
+      ];
 
-      const resp = await fetch(`${apiUrl}/graphql`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ query }),
-        credentials: 'include',
-      });
+      const mockActivity: RecentActivity[] = [
+        {
+          id: '1',
+          type: 'trade',
+          title: 'ETH Purchase Executed',
+          description: 'DeFi Yield Hunter bought 0.5 ETH at $3,150',
+          amount: 1575,
+          timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+          status: 'success'
+        },
+        {
+          id: '2',
+          type: 'revenue',
+          title: 'x402pay Revenue Received',
+          description: 'Query fee from agent subscription',
+          amount: 0.05,
+          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          status: 'success'
+        },
+        {
+          id: '3',
+          type: 'payment',
+          title: 'Bedrock API Payment',
+          description: 'AI analysis query processed',
+          amount: 0.002,
+          timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+          status: 'success'
+        }
+      ];
 
-      const json: GraphQLResponse<{ agents: Agent[]; portfolio: Portfolio }> = await resp.json();
-
-      if (json.errors) {
-        throw new Error(json.errors[0].message);
-      }
-
-      setAgents(json.data?.agents || []);
-      setPortfolio(json.data?.portfolio || null);
-    } catch (error) {
-      // console.error('Failed to fetch dashboard data:', error);
-    } finally {
+      setStats(mockStats);
+      setMarketAlerts(mockAlerts);
+      setRecentActivity(mockActivity);
       setIsLoading(false);
+    } catch (error) {
+      // eslint-disable-next-line no-console -- Replace with proper logger in production
+      setIsLoading(false);
+    }
+  };
+
+  const getAlertIcon = (type: string) => {
+    switch (type) {
+      case 'opportunity':
+        return '🎯';
+      case 'warning':
+        return '⚠️';
+      case 'info':
+        return 'ℹ️';
+      default:
+        return '📊';
+    }
+  };
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'trade':
+        return '📈';
+      case 'payment':
+        return '💳';
+      case 'agent_action':
+        return '🤖';
+      case 'revenue':
+        return '💰';
+      default:
+        return '📊';
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ACTIVE': return 'text-green-500';
-      case 'PAUSED': return 'text-yellow-500';
-      case 'ERROR': return 'text-red-500';
-      default: return 'text-gray-500';
+      case 'success':
+        return 'text-green-400';
+      case 'pending':
+        return 'text-yellow-400';
+      case 'failed':
+        return 'text-red-400';
+      default:
+        return 'text-gray-400';
     }
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex items-center justify-center">
-        <div className="crypto-card p-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400 mx-auto"></div>
-          <p className="text-gray-300 mt-4 text-center">Loading dashboard...</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-700 rounded w-1/3"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-gray-700 rounded"></div>
+            ))}
+          </div>
+          <div className="h-96 bg-gray-700 rounded"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
+        <p className="text-gray-400">Monitor your autonomous agents and portfolio performance</p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="crypto-card p-6">
+          <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">AgentVault Dashboard</h1>
-            <p className="text-gray-400">Monitor and manage your AI trading agents</p>
+              <p className="text-gray-400 text-sm">Portfolio Value</p>
+              <p className="text-2xl font-bold text-white">
+                ${stats?.totalPortfolioValue.toLocaleString()}
+              </p>
+              <p className={`text-sm ${stats && stats.pnlPercentage >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {stats && stats.pnlPercentage >= 0 ? '+' : ''}{stats?.pnlPercentage.toFixed(2)}%
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-purple-600/20 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">💰</span>
+            </div>
           </div>
-          <button
-            onClick={() => router.push('/agents/create')}
-            className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg hover:opacity-90 transition-opacity"
-          >
-            Create New Agent
-          </button>
         </div>
 
-        {/* Portfolio Overview */}
-        {portfolio && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="crypto-card p-6">
-              <h3 className="text-gray-400 text-sm uppercase tracking-wide mb-2">Total Value</h3>
-              <p className="text-2xl font-bold text-white">${portfolio.totalValue.toLocaleString()}</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-400 text-sm">Active Agents</p>
+              <p className="text-2xl font-bold text-white">{stats?.activeAgents}</p>
+              <p className="text-sm text-green-400">All operational</p>
             </div>
-            <div className="crypto-card p-6">
-              <h3 className="text-gray-400 text-sm uppercase tracking-wide mb-2">P&L</h3>
-              <p className={`text-2xl font-bold ${portfolio.totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                ${portfolio.totalPnL.toLocaleString()}
-              </p>
-            </div>
-            <div className="crypto-card p-6">
-              <h3 className="text-gray-400 text-sm uppercase tracking-wide mb-2">P&L %</h3>
-              <p className={`text-2xl font-bold ${portfolio.pnlPercentage >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {portfolio.pnlPercentage >= 0 ? '+' : ''}{portfolio.pnlPercentage.toFixed(2)}%
-              </p>
-            </div>
-            <div className="crypto-card p-6">
-              <h3 className="text-gray-400 text-sm uppercase tracking-wide mb-2">Active Agents</h3>
-              <p className="text-2xl font-bold text-white">{agents.filter(a => a.status === 'ACTIVE').length}</p>
+            <div className="w-12 h-12 bg-blue-600/20 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">🤖</span>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Agents Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div className="crypto-card p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-400 text-sm">Total Revenue</p>
+              <p className="text-2xl font-bold text-white">${stats?.totalRevenue.toFixed(2)}</p>
+              <p className="text-sm text-purple-400">+${stats?.monthlyRevenue.toFixed(2)} this month</p>
+            </div>
+            <div className="w-12 h-12 bg-green-600/20 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">📊</span>
+            </div>
+          </div>
+        </div>
+
+            <div className="crypto-card p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-400 text-sm">Success Rate</p>
+              <p className="text-2xl font-bold text-white">{stats?.successRate}%</p>
+              <p className="text-sm text-blue-400">{stats?.totalTrades} total trades</p>
+            </div>
+            <div className="w-12 h-12 bg-yellow-600/20 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">🎯</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Portfolio Chart - Takes up 2 columns */}
+        <div className="lg:col-span-2">
+          <Suspense fallback={
+            <div className="crypto-card p-6 animate-pulse">
+              <div className="h-64 bg-gray-700 rounded"></div>
+            </div>
+          }>
+            <DynamicPortfolioChart />
+          </Suspense>
+        </div>
+
+        {/* Side Panel */}
+        <div className="space-y-6">
+          {/* Market Alerts */}
           <div className="crypto-card p-6">
-            <h2 className="text-xl font-bold text-white mb-4">Your AI Agents</h2>
-            <div className="space-y-4">
-              {agents.map((agent) => (
-                <div key={agent.id} className="border border-gray-700 rounded-lg p-4 hover:border-purple-500 transition-colors">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-white font-semibold">{agent.name}</h3>
-                    <span className={`text-sm px-2 py-1 rounded ${getStatusColor(agent.status)}`}>
-                      {agent.status}
-                    </span>
-                  </div>
-                  <p className="text-gray-400 text-sm mb-3">{agent.description}</p>
-                  {agent.performance && (
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-gray-500">Trades</p>
-                        <p className="text-white font-medium">{agent.performance.totalTrades}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Win Rate</p>
-                        <p className="text-white font-medium">{agent.performance.winRate}%</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Return</p>
-                        <p className={`font-medium ${agent.performance.totalReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {agent.performance.totalReturn >= 0 ? '+' : ''}{agent.performance.totalReturn}%
+            <h3 className="text-lg font-semibold text-white mb-4">Market Alerts</h3>
+            <div className="space-y-3">
+              {marketAlerts.slice(0, 3).map((alert) => (
+                <div key={alert.id} className="bg-gray-800/50 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <span className="text-lg">{getAlertIcon(alert.type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium text-sm">{alert.title}</p>
+                      <p className="text-gray-400 text-xs mt-1">{alert.message}</p>
+                      <p className="text-gray-500 text-xs mt-1">
+                        {new Date(alert.timestamp).toLocaleTimeString()}
                         </p>
                       </div>
                     </div>
-                  )}
                 </div>
               ))}
+              <button className="w-full text-purple-400 hover:text-purple-300 text-sm mt-2">
+                View all alerts →
+              </button>
             </div>
           </div>
 
+          {/* Quick Actions */}
           <div className="crypto-card p-6">
-            <h2 className="text-xl font-bold text-white mb-4">Portfolio Assets</h2>
-            <div className="space-y-4">
-              {portfolio?.assets.map((asset) => (
-                <div key={asset.symbol} className="flex justify-between items-center border border-gray-700 rounded-lg p-4">
-                  <div>
-                    <p className="text-white font-semibold">{asset.symbol}</p>
-                    <p className="text-gray-400 text-sm">{asset.amount} {asset.symbol}</p>
+            <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+            <div className="space-y-3">
+              <button className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg text-sm transition-colors">
+                Create New Agent
+              </button>
+              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg text-sm transition-colors">
+                Fund Wallet
+              </button>
+              <button className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg text-sm transition-colors">
+                View Analytics
+              </button>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="crypto-card p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Recent Activity</h3>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {recentActivity.map((activity) => (
+                <div key={activity.id} className="flex items-center space-x-3">
+                  <span className="text-lg">{getActivityIcon(activity.type)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium">{activity.title}</p>
+                    <p className="text-gray-400 text-xs">{activity.description}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-gray-500 text-xs">
+                        {new Date(activity.timestamp).toLocaleTimeString()}
+                      </span>
+                      {activity.amount && (
+                        <span className={`text-xs font-medium ${getStatusColor(activity.status)}`}>
+                          ${activity.amount.toLocaleString()}
+                        </span>
+                      )}
                   </div>
-                  <div className="text-right">
-                    <p className="text-white font-medium">${asset.value.toLocaleString()}</p>
-                    <p className={`text-sm ${asset.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {asset.change24h >= 0 ? '+' : ''}{asset.change24h}%
-                    </p>
                   </div>
                 </div>
               ))}
+            </div>
             </div>
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <div className="crypto-card p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Recent Activity</h2>
-          <div className="space-y-3">
-            {[
-              { time: '2 min ago', action: 'BTC Momentum Bot executed buy order', amount: '$1,250' },
-              { time: '15 min ago', action: 'DeFi Yield Hunter paused by user', amount: null },
-              { time: '1 hour ago', action: 'BTC Momentum Bot executed sell order', amount: '$2,100' },
-              { time: '3 hours ago', action: 'New agent "ETH Scalper" created', amount: null }
-            ].map((activity, index) => (
-              <div key={index} className="flex justify-between items-center py-2 border-b border-gray-800 last:border-b-0">
-                <div>
-                  <p className="text-white text-sm">{activity.action}</p>
-                  <p className="text-gray-500 text-xs">{activity.time}</p>
+      {/* Agent Cards */}
+      <div className="mt-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-white">Your Agents</h2>
+          <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm transition-colors">
+            Manage All Agents
+          </button>
                 </div>
-                {activity.amount && (
-                  <p className="text-green-400 font-medium">{activity.amount}</p>
-                )}
+        <Suspense fallback={
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="crypto-card p-6 animate-pulse">
+                <div className="h-32 bg-gray-700 rounded"></div>
               </div>
             ))}
+          </div>
+        }>
+          <AgentCards />
+        </Suspense>
+      </div>
+
+      {/* Performance Insights */}
+      <div className="mt-8 crypto-card p-6">
+        <h3 className="text-xl font-bold text-white mb-4">Performance Insights</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-gray-800/50 rounded-lg p-4">
+            <h4 className="text-white font-semibold mb-2">Best Performing Strategy</h4>
+            <p className="text-gray-400 text-sm mb-2">DeFi Yield Farming</p>
+            <p className="text-green-400 font-bold">+15.3% this month</p>
+          </div>
+          <div className="bg-gray-800/50 rounded-lg p-4">
+            <h4 className="text-white font-semibold mb-2">Most Active Pair</h4>
+            <p className="text-gray-400 text-sm mb-2">ETH/USDC</p>
+            <p className="text-blue-400 font-bold">127 trades executed</p>
+          </div>
+          <div className="bg-gray-800/50 rounded-lg p-4">
+            <h4 className="text-white font-semibold mb-2">Revenue Growth</h4>
+            <p className="text-gray-400 text-sm mb-2">x402pay earnings</p>
+            <p className="text-purple-400 font-bold">+28% vs last month</p>
           </div>
         </div>
       </div>
