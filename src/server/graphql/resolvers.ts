@@ -106,6 +106,26 @@ const resolvers = {
       return results;
     },
 
+    // Test CDP connection
+    testCDPConnection: async () => {
+      try {
+        const walletService = new CDPWalletService();
+        const result = await walletService.testConnection();
+        
+        return {
+          success: result.success,
+          message: result.message,
+          timestamp: new Date().toISOString()
+        };
+      } catch (error) {
+        return {
+          success: false,
+          message: `CDP test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date().toISOString()
+        };
+      }
+    },
+
     // Basic agent query
     agents: async () => {
       try {

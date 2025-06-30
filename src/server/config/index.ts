@@ -27,8 +27,14 @@ export const config: AppConfig = {
     bedrockModelId: process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
   },
   cdp: {
+    // New SDK field names
+    apiKeyId: process.env.CDP_API_KEY_ID || process.env.CDP_API_KEY || '',
+    apiKeySecret: process.env.CDP_API_KEY_SECRET || process.env.CDP_PRIVATE_KEY || '',
+
+    // Back-compat fields used in parts of the code we haven't migrated yet
     apiKeyName: process.env.CDP_API_KEY || '',
     privateKey: process.env.CDP_PRIVATE_KEY || '',
+
     baseUrl: process.env.CDP_BASE_URL || 'https://api.coinbase.com',
     network: process.env.CDP_NETWORK || 'base-sepolia',
     walletId: process.env.CDP_WALLET_ID,
@@ -36,7 +42,12 @@ export const config: AppConfig = {
   x402pay: {
     apiKey: process.env.X402_PAY_API_KEY || '',
     secretKey: process.env.X402_PAY_SECRET_KEY || '',
-    baseUrl: process.env.X402_PAY_BASE_URL || 'https://api.x402.org',
+    env: process.env.X402_PAY_ENV || 'sandbox',
+    baseUrl:
+      process.env.X402_PAY_BASE_URL ||
+      ((process.env.X402_PAY_ENV || 'sandbox') === 'production'
+        ? 'https://api.x402.dev/v1'
+        : 'https://facilitator.x402.org'),
     webhookSecret: process.env.X402_PAY_WEBHOOK_SECRET || '',
     platformWallet: process.env.X402PAY_PLATFORM_WALLET || '',
     enabled: process.env.X402_PAY_ENABLED === 'true',
@@ -79,6 +90,7 @@ const requiredEnvVars = [
   'AWS_SECRET_ACCESS_KEY',
   'CDP_API_KEY',
   'CDP_PRIVATE_KEY',
+  'CDP_WALLET_ID',
   'X402_PAY_API_KEY',
   'X402_PAY_SECRET_KEY',
   'X402_PAY_WEBHOOK_SECRET',

@@ -213,11 +213,10 @@ router.post('/agent-query', async (req: any, res) => {
     const payment = await db.payment.create({
       data: {
         userId,
-        amount: paymentResult.amount || 0.1, // Default query fee
+        amount: 0.1, // Default query fee from pricing
         currency: 'USDC',
         type: PaymentType.QUERY_FEE,
         status: PaymentStatus.PENDING,
-        x402payId: paymentResult.id,
         metadata: JSON.stringify({
           agentId,
           queryType,
@@ -246,29 +245,6 @@ router.post('/agent-query', async (req: any, res) => {
       success: false,
       error: 'Failed to process agent query payment',
       message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-// Webhook endpoint for x402pay notifications
-router.post('/webhook', async (req, res) => {
-  try {
-    const signature = req.headers['x-signature'] as string;
-    const payload = req.body;
-
-    // Verify and handle webhook
-    const handled = await paymentService.handleWebhook(payload, signature);
-
-    if (handled) {
-      res.status(200).json({ success: true });
-    } else {
-      res.status(400).json({ success: false, error: 'Invalid webhook' });
-    }
-  } catch (error) {
-    logger.error('Webhook handling failed:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Webhook processing failed',
     });
   }
 });

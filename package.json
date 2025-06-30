@@ -5,13 +5,13 @@
   "main": "dist/server/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "nodemon src/server/index.ts",
-    "dev:client": "next dev -p 3001",
+    "dev:server": "nodemon --watch src/server --ext ts,json --exec \"npx tsx src/server/index.ts\"",
+    "dev:client": "next dev -p 3000",
     "build": "npm run build:server && npm run build:client",
     "build:server": "tsc -p tsconfig.server.json",
     "build:client": "next build",
     "start": "concurrently \"npm run start:server\" \"npm run start:client\"",
-    "start:server": "node dist/server/index.js",
+    "start:server": "node dist/server/server/index.js",
     "start:client": "next start",
     "test": "jest --passWithNoTests",
     "test:e2e": "cypress run",
@@ -28,7 +28,7 @@
     "docker:build": "docker build -t agentvault:latest .",
     "docker:run": "docker-compose up -d",
     "docker:stop": "docker-compose down",
-    "health-check": "curl -f http://localhost:4000/api/health || exit 1",
+    "health-check": "curl -f http://localhost:4000/health || exit 1",
     "production": "NODE_ENV=production npm start",
     "audit:prod": "npm audit --omit=dev --audit-level=critical",
     "postinstall": "patch-package"
@@ -36,10 +36,13 @@
   "dependencies": {
     "@apollo/client": "^3.10.4",
     "@aws-sdk/client-bedrock-runtime": "^3.600.0",
+    "@coinbase/agentkit": "^0.8.2",
+    "@coinbase/agentkit-langchain": "^0.3.0",
     "@coinbase/cdp-sdk": "^1.16.0",
     "@coinbase/wallet-sdk": "^4.0.3",
+    "@coinbase/x402": "^0.4.1",
     "@pinata/sdk": "^2.1.0",
-    "@prisma/client": "^5.15.0",
+    "@prisma/client": "^5.22.0",
     "apollo-server-express": "^3.12.1",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
@@ -71,7 +74,9 @@
     "redis": "^4.6.14",
     "uuid": "^10.0.0",
     "winston": "^3.13.0",
-    "ws": "^8.17.1"
+    "ws": "^8.17.1",
+    "x402-express": "^0.4.1",
+    "x402-fetch": "^0.4.1"
   },
   "devDependencies": {
     "@heroicons/react": "^2.2.0",
@@ -108,6 +113,7 @@
     "tailwindcss": "^3.4.4",
     "ts-jest": "^29.1.5",
     "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
     "typescript": "^5.5.2"
   },
   "keywords": [

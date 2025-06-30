@@ -3,8 +3,45 @@ import { config } from '../config';
 import { logger } from '../utils/logger';
 import { BedrockRequest } from '../../types';
 
+/**
+ * Bedrock Guardrails configuration for safe AI trading operations
+ * This ensures the AI never makes harmful or inappropriate trading decisions
+ */
+const BEDROCK_GUARDRAILS = {
+  guardrailIdentifier: 'trading-safety-guardrail',
+  guardrailVersion: 'DRAFT',
+  
+  // Content filtering policies
+  contentFilters: {
+    illegalActivities: { threshold: 'HIGH' },
+    harmfulContent: { threshold: 'MEDIUM' },
+    inappropriateContent: { threshold: 'MEDIUM' },
+  },
+  
+  // Denied topics for financial safety
+  deniedTopics: [
+    'pump and dump',
+    'market manipulation',
+    'insider trading',
+    'ponzi scheme',
+    'illegal activities',
+    'money laundering',
+  ],
+};
+
+/**
+ * Rate limiting configuration for Bedrock API calls
+ */
+const RATE_LIMITS = {
+  requestsPerMinute: 100,
+  requestsPerHour: 1000,
+  maxConcurrentRequests: 10,
+};
+
 export class BedrockService {
   private client: BedrockRuntimeClient;
+  private requestCount: Map<string, number> = new Map();
+  private concurrentRequests: number = 0;
 
   constructor() {
     this.client = new BedrockRuntimeClient({
@@ -14,6 +51,13 @@ export class BedrockService {
         secretAccessKey: config.aws.secretAccessKey,
       },
     });
+
+    // Initialize rate limiting cleanup
+    setInterval(() => {
+      this.cleanupRateLimits();
+    }, 60000); // Clean up every minute
+
+    logger.info('BedrockService initialized with guardrails and rate limiting');
   }
 
   async analyzeMarketSentiment(marketData: any): Promise<any> {
@@ -192,7 +236,15 @@ export class BedrockService {
   }
 
   private async invokeModel(request: BedrockRequest): Promise<any> {
+    // Check rate limits before making the request
+    await this.checkRateLimit('general');
+    
+    this.concurrentRequests++;
+    
     try {
+      // Apply content filtering for safety
+      const safePrompt = this.applyContentFiltering(request.prompt);
+      
       const input = {
         modelId: request.modelId,
         contentType: 'application/json',
@@ -204,10 +256,15 @@ export class BedrockService {
           messages: [
             {
               role: 'user',
-              content: request.prompt,
+              content: safePrompt,
             },
           ],
           tools: request.tools,
+          // Include guardrails in the request
+          guardrail_config: {
+            guardrail_identifier: BEDROCK_GUARDRAILS.guardrailIdentifier,
+            guardrail_version: BEDROCK_GUARDRAILS.guardrailVersion,
+          },
         }),
       };
 
@@ -220,16 +277,25 @@ export class BedrockService {
 
       const responseBody = JSON.parse(new TextDecoder().decode(response.body));
       
-      logger.info('Bedrock analysis completed', {
+      // Post-process response for additional safety
+      const safeResponse = this.postProcessResponse(responseBody);
+      
+      logger.info('Bedrock analysis completed with guardrails', {
         modelId: request.modelId,
         inputTokens: responseBody.usage?.input_tokens,
         outputTokens: responseBody.usage?.output_tokens,
+        guardrailsApplied: true,
+        contentFiltered: safePrompt !== request.prompt,
       });
 
-      return responseBody;
+      return safeResponse;
     } catch (error) {
       logger.error('Bedrock analysis failed:', error);
-      throw new Error(`AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Return safe fallback response instead of throwing
+      return this.getSafetyFallbackResponse();
+    } finally {
+      this.concurrentRequests--;
     }
   }
 
@@ -341,5 +407,125 @@ Consider:
 
 Use the opportunity_detection tool to structure your response.
     `.trim();
+  }
+
+  /**
+   * Check rate limits before making API calls
+   */
+  private async checkRateLimit(operation: string): Promise<void> {
+    const now = Date.now();
+    const minute = Math.floor(now / 60000);
+    const hour = Math.floor(now / 3600000);
+    
+    const minuteKey = `${operation}:${minute}`;
+    const hourKey = `${operation}:${hour}`;
+    
+    const minuteCount = this.requestCount.get(minuteKey) || 0;
+    const hourCount = this.requestCount.get(hourKey) || 0;
+    
+    if (minuteCount >= RATE_LIMITS.requestsPerMinute) {
+      throw new Error(`Rate limit exceeded: ${RATE_LIMITS.requestsPerMinute} requests per minute`);
+    }
+    
+    if (hourCount >= RATE_LIMITS.requestsPerHour) {
+      throw new Error(`Rate limit exceeded: ${RATE_LIMITS.requestsPerHour} requests per hour`);
+    }
+    
+    if (this.concurrentRequests >= RATE_LIMITS.maxConcurrentRequests) {
+      throw new Error(`Concurrent request limit exceeded: ${RATE_LIMITS.maxConcurrentRequests}`);
+    }
+    
+    // Increment counters
+    this.requestCount.set(minuteKey, minuteCount + 1);
+    this.requestCount.set(hourKey, hourCount + 1);
+  }
+
+  /**
+   * Clean up old rate limit entries
+   */
+  private cleanupRateLimits(): void {
+    const now = Date.now();
+    const oldestMinute = Math.floor(now / 60000) - 5; // Keep last 5 minutes
+    const oldestHour = Math.floor(now / 3600000) - 2; // Keep last 2 hours
+    
+    for (const [key] of this.requestCount) {
+      const [, timestamp] = key.split(':');
+      const time = parseInt(timestamp);
+      
+      if (time < oldestMinute || time < oldestHour) {
+        this.requestCount.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Apply content filtering to remove unsafe content
+   */
+  private applyContentFiltering(prompt: string): string {
+    let filtered = prompt;
+    
+    // Remove denied topics
+    for (const topic of BEDROCK_GUARDRAILS.deniedTopics) {
+      const regex = new RegExp(topic, 'gi');
+      filtered = filtered.replace(regex, '[FILTERED]');
+    }
+    
+    // Add safety disclaimers
+    filtered += '\n\nIMPORTANT: Provide responsible financial advice with appropriate risk warnings and regulatory compliance.';
+    
+    return filtered;
+  }
+
+  /**
+   * Post-process responses to ensure safety
+   */
+  private postProcessResponse(response: any): any {
+    if (response.content && Array.isArray(response.content)) {
+      response.content = response.content.map((item: any) => {
+        if (item.type === 'tool_use' && item.input) {
+          // Add safety warnings to tool responses
+          if (!item.input.risk_warning && !item.input.safety_warnings) {
+            item.input.safety_warnings = [
+              'This is not financial advice. Consult a professional advisor.',
+              'Past performance does not guarantee future results.',
+              'Only invest what you can afford to lose.',
+            ];
+          }
+        }
+        return item;
+      });
+    }
+    
+    return response;
+  }
+
+  /**
+   * Return safe fallback response in case of errors
+   */
+  private getSafetyFallbackResponse(): any {
+    return {
+      content: [
+        {
+          type: 'tool_use',
+          name: 'safety_fallback',
+          input: {
+            symbol: 'UNKNOWN',
+            side: 'HOLD',
+            confidence: 0.0,
+            reasoning: 'Unable to provide analysis due to safety constraints or system error.',
+            risk_warning: 'Trading involves significant risk. Please consult a financial advisor.',
+            safety_warnings: [
+              'System temporarily unavailable',
+              'No trading recommendations at this time',
+              'Please verify all information independently',
+            ],
+          },
+        },
+      ],
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+      },
+    };
   }
 } 

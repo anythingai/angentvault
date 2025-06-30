@@ -109,6 +109,7 @@ export const typeDefs = gql`
   type Query {
     hello: String!
     hackathonDemo: HackathonDemoResponse!
+    testCDPConnection: CDPTestResponse!
     me: User
     agents: [Agent!]!
     agent(id: ID!): Agent
@@ -142,10 +143,19 @@ export const typeDefs = gql`
     message: String!
   }
 
+  type CDPTestResponse {
+    success: Boolean!
+    message: String!
+    timestamp: DateTime!
+  }
+
   type Mutation {
     createAgent(input: CreateAgentInput!): Agent!
+    startAgent(id: ID!): Agent!
+    stopAgent(id: ID!): Agent!
     deployAgent(id: ID!): DeploymentResponse!
     executeTrade(input: ExecuteTradeInput!): Trade!
+    executePayment(agentId: ID!, amount: Float!): Payment!
     processPayment(input: ProcessPaymentInput!): Payment!
   }
 

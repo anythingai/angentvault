@@ -290,8 +290,14 @@ export interface AWSConfig {
 }
 
 export interface CDPConfig {
-  apiKeyName: string;
-  privateKey: string;
+  // Legacy field names
+  apiKeyName?: string;
+  privateKey?: string;
+
+  // New SDK field names (preferred)
+  apiKeyId?: string;
+  apiKeySecret?: string;
+
   baseUrl: string;
   network?: string;
   walletId?: string;
@@ -300,7 +306,14 @@ export interface CDPConfig {
 export interface X402PayConfig {
   apiKey: string;
   secretKey?: string;
+  /**
+   * Base URL for the facilitator / REST API.  This will usually resolve to either
+   * https://sandbox.api.x402.dev/v1 (sandbox) or https://api.x402.dev/v1 (production)
+   * but can be overridden via X402_PAY_BASE_URL.
+   */
   baseUrl: string;
+  /** The logical environment (sandbox | production) */
+  env?: string;
   webhookSecret: string;
   platformWallet: string;
   enabled?: boolean;

@@ -3,140 +3,197 @@ version: "2.0"
 
 services:
   web:
-    image: agentvault/webapp:latest
+    image: "${DOCKER_IMAGE:-ghcr.io/your-org/agentvault:latest}"
+    
+    # Environment variables for the application
+    env:
+      - NODE_ENV=${AKASH_ENV:-production}
+      - PORT=4000
+      - API_URL=https://agentvault.akash.network
+      - CLIENT_URL=https://agentvault.akash.network
+      
+      # Database configuration
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_MAX_CONNECTIONS=10
+      
+      # Redis configuration  
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=6379
+      
+      # AWS Bedrock configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=us-east-1
+      - BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
+      
+      # CDP Wallet configuration
+      - CDP_API_KEY=${CDP_API_KEY}
+      - CDP_PRIVATE_KEY=${CDP_PRIVATE_KEY}
+      - CDP_NETWORK=base-sepolia
+      
+      # x402pay configuration
+      - X402_PAY_API_KEY=${X402_PAY_API_KEY}
+      - X402_PAY_SECRET_KEY=${X402_PAY_SECRET_KEY}
+      - X402_PAY_ENV=sandbox
+      - X402_PAY_ENABLED=true
+      
+      # Pinata configuration
+      - PINATA_JWT=${PINATA_JWT}
+      - PINATA_GATEWAY_URL=https://gateway.pinata.cloud
+      
+      # Security configuration
+      - JWT_SECRET=${JWT_SECRET:-hackathon-demo-secret-change-in-production}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-demo-encryption-key}
+      
+      # Feature flags for hackathon demo
+      - ENABLE_DEMO_MODE=true
+      - ENABLE_PAPER_TRADING=true
+      - ENABLE_REAL_TRADING=false
+      - ENABLE_WEBSOCKET=true
+      
+      # Agent configuration
+      - AGENT_EXECUTION_INTERVAL=60000
+      - AGENT_MAX_TRADE_SIZE=1000
+      - AGENT_DEFAULT_SLIPPAGE=0.02
+      - AGENT_MAX_DAILY_TRADES=50
+      
+      # Rate limiting
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=100
+
+    # Health check configuration
+    healthcheck:
+      http:
+        path: /api/health
+        port: 4000
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Resource requirements
     expose:
-      - port: 3000
+      - port: 4000
         as: 80
         to:
           - global: true
-    env:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://api.agentvault.ai
-    depends_on:
-      - api
-
-  api:
-    image: agentvault/api:latest
-    expose:
-      - port: 4000
-        as: 4000
-        to:
-          - global: true
-    env:
-      - NODE_ENV=production
-      - PORT=4000
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - AWS_REGION=${AWS_REGION}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
-      - CDP_API_KEY=${CDP_API_KEY}
-      - CDP_PRIVATE_KEY=${CDP_PRIVATE_KEY}
-      - X402_PAY_API_KEY=${X402_PAY_API_KEY}
-      - X402_PAY_SECRET_KEY=${X402_PAY_SECRET_KEY}
-      - X402_PAY_WEBHOOK_SECRET=${X402_PAY_WEBHOOK_SECRET}
-      - PINATA_API_KEY=${PINATA_API_KEY}
-      - PINATA_SECRET_API_KEY=${PINATA_SECRET_API_KEY}
-      - JWT_SECRET=${JWT_SECRET}
-    depends_on:
-      - redis
-      - postgres
+            
+    # Startup command
+    command:
+      - "npm"
+      - "run"
+      - "production"
 
   redis:
     image: redis:7-alpine
+    
+    # Redis configuration
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    
+    # Health check for Redis
+    healthcheck:
+      exec:
+        command:
+          - "redis-cli"
+          - "ping"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
     expose:
       - port: 6379
-        to:
-          - service: api
 
-  postgres:
-    image: postgres:15-alpine
-    expose:
-      - port: 5432
-        to:
-          - service: api
+  # Database migration job (runs once on deployment)
+  migrate:
+    image: "${DOCKER_IMAGE:-ghcr.io/your-org/agentvault:latest}"
+    
     env:
-      - POSTGRES_USER=agentvault
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=agentvault
-    params:
-      storage:
-        mount: /var/lib/postgresql/data
-        readOnly: false
+      - DATABASE_URL=${DATABASE_URL}
+      - NODE_ENV=${AKASH_ENV:-production}
+    
+    command:
+      - "npx"
+      - "prisma"
+      - "migrate"
+      - "deploy"
+    
+    # This is a job that runs once and exits
+    restart_policy: "never"
 
 profiles:
   compute:
     web:
       resources:
         cpu:
-          units: 0.5
+          units: 2
         memory:
-          size: 512Mi
+          size: 4Gi
         storage:
-          size: 1Gi
-    api:
-      resources:
-        cpu:
-          units: 1
-        memory:
-          size: 1Gi
-        storage:
-          size: 2Gi
+          size: 10Gi
+        
     redis:
       resources:
         cpu:
-          units: 0.25
-        memory:
-          size: 256Mi
-        storage:
-          size: 512Mi
-    postgres:
-      resources:
-        cpu:
           units: 0.5
         memory:
           size: 512Mi
         storage:
-          size: 5Gi
+          size: 2Gi
+          
+    migrate:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 1Gi
+        storage:
+          size: 1Gi
 
   placement:
     dcloud:
-      attributes:
-        host: akash
-      signedBy:
-        anyOf:
-          - "akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63"
-          - "akash18qa2a2ltfyvkyj0ggj3hkvuj6twzyumuaru9s4"
+      # Pricing strategy for cost optimization
       pricing:
         web:
           denom: uakt
-          amount: 100
-        api:
-          denom: uakt
-          amount: 200
+          amount: 1000
         redis:
           denom: uakt
-          amount: 50
-        postgres:
+          amount: 500
+        migrate:
           denom: uakt
           amount: 100
+
+      attributes:
+        # Prefer providers with good performance
+        host: akash
+        tier: community
+        # Require persistent storage
+        persistent-storage: required
+
+      # Signed by requirements (optional for enhanced security)
+      signedBy:
+        anyOf: []
 
 deployment:
   web:
     dcloud:
       profile: web
-      count: 1
-  api:
-    dcloud:
-      profile: api
-      count: 1
+      count: 2  # Run 2 instances for high availability
+      
   redis:
     dcloud:
       profile: redis
       count: 1
-  postgres:
+      
+  migrate:
     dcloud:
-      profile: postgres
+      profile: migrate
       count: 1 

@@ -1,0 +1,361 @@
+name: Deploy to Akash Network
+
+on:
+  push:
+    branches: [ main, staging ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/agentvault
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Type check
+      run: npm run type-check
+
+    - name: Lint code
+      run: npm run lint
+
+    - name: Run unit tests
+      run: npm test
+      env:
+        CI: true
+        ENABLE_DEMO_MODE: true
+
+    - name: Generate test coverage
+      run: npm test -- --coverage --watchAll=false
+      env:
+        CI: true
+        ENABLE_DEMO_MODE: true
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        fail_ci_if_error: false
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run security audit
+      run: npm audit --audit-level=critical
+
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=high
+      continue-on-error: true
+
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        format: spdx-json
+        output-file: sbom.spdx.json
+
+    - name: Upload SBOM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom
+        path: sbom.spdx.json
+
+  deploy-staging:
+    name: Deploy to Staging (Akash Network)
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Akash CLI
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/akash-network/node/master/install.sh | sh
+        sudo mv ./bin/akash /usr/local/bin/
+
+    - name: Prepare deployment manifest
+      run: |
+        envsubst < deploy.sdl > deploy-staging.yml
+      env:
+        DOCKER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        AKASH_ENV: staging
+        DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        REDIS_HOST: ${{ secrets.STAGING_REDIS_HOST }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        CDP_API_KEY: ${{ secrets.CDP_API_KEY }}
+        CDP_PRIVATE_KEY: ${{ secrets.CDP_PRIVATE_KEY }}
+        X402_PAY_API_KEY: ${{ secrets.X402_PAY_API_KEY }}
+        X402_PAY_SECRET_KEY: ${{ secrets.X402_PAY_SECRET_KEY }}
+        PINATA_JWT: ${{ secrets.PINATA_JWT }}
+
+    - name: Deploy to Akash Network
+      run: |
+        # Configure Akash wallet
+        echo "${{ secrets.AKASH_WALLET_MNEMONIC }}" | akash keys add deployer --recover --keyring-backend=test
+        
+        # Create deployment
+        akash tx deployment create deploy-staging.yml \
+          --from deployer \
+          --keyring-backend=test \
+          --node=${{ secrets.AKASH_NODE }} \
+          --chain-id=${{ secrets.AKASH_CHAIN_ID }} \
+          --gas=auto \
+          --gas-adjustment=1.3 \
+          --yes
+
+        echo "✅ Staging deployment submitted to Akash Network"
+
+  deploy-production:
+    name: Deploy to Production (Akash Network)
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Akash CLI
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/akash-network/node/master/install.sh | sh
+        sudo mv ./bin/akash /usr/local/bin/
+
+    - name: Prepare production manifest
+      run: |
+        envsubst < deploy.sdl > deploy-production.yml
+      env:
+        DOCKER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        AKASH_ENV: production
+        DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        REDIS_HOST: ${{ secrets.PROD_REDIS_HOST }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        CDP_API_KEY: ${{ secrets.PROD_CDP_API_KEY }}
+        CDP_PRIVATE_KEY: ${{ secrets.PROD_CDP_PRIVATE_KEY }}
+        X402_PAY_API_KEY: ${{ secrets.PROD_X402_PAY_API_KEY }}
+        X402_PAY_SECRET_KEY: ${{ secrets.PROD_X402_PAY_SECRET_KEY }}
+        PINATA_JWT: ${{ secrets.PROD_PINATA_JWT }}
+
+    - name: Deploy to Akash Network
+      run: |
+        # Configure Akash wallet
+        echo "${{ secrets.AKASH_WALLET_MNEMONIC }}" | akash keys add deployer --recover --keyring-backend=test
+        
+        # Create deployment
+        akash tx deployment create deploy-production.yml \
+          --from deployer \
+          --keyring-backend=test \
+          --node=${{ secrets.AKASH_NODE }} \
+          --chain-id=${{ secrets.AKASH_CHAIN_ID }} \
+          --gas=auto \
+          --gas-adjustment=1.3 \
+          --yes
+
+        echo "✅ Production deployment submitted to Akash Network"
+
+    - name: Production Health Check & Monitoring
+      run: |
+        # Wait for deployment to be ready
+        sleep 60
+        
+        SERVICE_URL="https://agentvault.akash.network"
+        
+        # Health check with retries
+        for i in {1..15}; do
+          if curl -f "$SERVICE_URL/api/health" > /dev/null 2>&1; then
+            echo "✅ Production deployment healthy at $SERVICE_URL"
+            
+            # Additional production checks
+            curl -f "$SERVICE_URL/api/agents" > /dev/null && echo "✅ Agents API responsive"
+            curl -f "$SERVICE_URL/api/portfolio" > /dev/null && echo "✅ Portfolio API responsive"
+            
+            # Notify success
+            curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'Content-type: application/json' \
+              --data '{"text":"🚀 AgentVault deployed successfully to production on Akash Network: '$SERVICE_URL'"}'
+            
+            break
+          fi
+          echo "⏳ Waiting for production deployment... (attempt $i/15)"
+          sleep 30
+        done
+
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run E2E tests against staging
+      run: npm run test:e2e
+      env:
+        TEST_BASE_URL: https://${{ env.AKASH_DEPLOYMENT_DSEQ }}.akash-staging.net
+        CI: true
+
+  performance-tests:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup k6
+      run: |
+        wget https://github.com/grafana/k6/releases/download/v0.45.0/k6-v0.45.0-linux-amd64.tar.gz
+        tar -xzf k6-v0.45.0-linux-amd64.tar.gz
+        sudo mv k6-v0.45.0-linux-amd64/k6 /usr/local/bin/
+
+    - name: Run performance tests
+      run: |
+        k6 run --env BASE_URL=https://${{ env.AKASH_DEPLOYMENT_DSEQ }}.akash-staging.net tests/performance/load-test.js
+
+    - name: Upload performance results
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-results
+        path: performance-results.json
+
+  cleanup:
+    name: Cleanup Old Deployments
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Setup Akash CLI
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/akash-network/node/master/install.sh | sh
+        sudo mv ./bin/akash /usr/local/bin/
+
+    - name: Configure Akash Wallet
+      run: |
+        echo "${{ secrets.AKASH_WALLET_MNEMONIC }}" | akash keys add deployer --recover --keyring-backend=test
+
+    - name: Cleanup old deployments
+      run: |
+        # List all deployments and close old ones (keep latest 3)
+        akash query deployment list --owner=$(akash keys show deployer -a --keyring-backend=test) \
+          --node=${{ secrets.AKASH_NODE }} \
+          --output=json | \
+        jq -r '.deployments | sort_by(.deployment.created_at) | reverse | .[3:] | .[].deployment.deployment_id.dseq' | \
+        while read dseq; do
+          echo "Closing old deployment: $dseq"
+          akash tx deployment close \
+            --dseq=$dseq \
+            --from=deployer \
+            --keyring-backend=test \
+            --node=${{ secrets.AKASH_NODE }} \
+            --chain-id=${{ secrets.AKASH_CHAIN_ID }} \
+            --gas=auto \
+            --gas-adjustment=1.3 \
+            --yes || true
+        done 

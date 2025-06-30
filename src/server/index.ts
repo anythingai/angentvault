@@ -14,7 +14,6 @@ import { errorHandler } from './middleware/error';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { wsHandler } from './websocket/handler';
 import { ApolloServerPluginLandingPageProductionDefault } from 'apollo-server-core';
-import { redis } from './redis';
 import { metricsRouter } from './metrics';
 import { metricsMiddleware } from './middleware/metrics';
 import depthLimit from 'graphql-depth-limit';
@@ -63,25 +62,17 @@ async function startServer() {
     process.exit(1);
   }
 
-  // Connect to Redis (graceful fallback to memory cache)
-  try {
-    await redis.connect();
-  } catch (error) {
-    logger.warn('Redis connection failed, continuing with memory cache fallback:', error);
-    // Continue without Redis - the service has memory cache fallback
-  }
+  // Skip Redis connection for now to avoid hanging issues
+  logger.info('Using memory cache fallback (Redis disabled for development)');
 
   // Health check endpoint
   app.get('/health', async (req, res) => {
     try {
-      // You could add more health checks here (Redis, external APIs, etc.)
-      const redisHealthy = await redis.healthCheck();
-
       res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
         database: 'connected',
-        redis: redisHealthy ? 'connected' : 'unhealthy',
+        redis: 'disabled (memory cache)',
         version: process.env.npm_package_version || '1.0.0',
       });
     } catch (error) {
@@ -108,6 +99,8 @@ async function startServer() {
     // Lazy-load other services as needed
   };
 
+  logger.debug('Services instantiated, creating Apollo Server...');
+  
   // GraphQL setup
   const server = new ApolloServer({
     typeDefs,
@@ -133,8 +126,28 @@ async function startServer() {
   // Apply paywall to GraphQL endpoint
   app.use('/graphql', authMiddleware, paywallMiddleware());
 
-  await server.start();
+  logger.info('🛠  Starting ApolloServer...');
+  logger.debug('About to call server.start()');
+  
+  try {
+    await server.start();
+    logger.debug('server.start() completed successfully');
+    logger.info('✅ ApolloServer started');
+  } catch (error) {
+    logger.error('server.start() failed with error:', error);
+    logger.error('Failed to start ApolloServer:', error);
+    throw error;
+  }
+  
+  logger.debug('About to apply middleware');
   server.applyMiddleware({ app: app as any, path: '/graphql' });
+  logger.debug('Middleware applied successfully');
+
+  // Metrics collection
+  app.use(metricsMiddleware([/\/metrics/]));
+
+  // Expose Prometheus metrics
+  app.use('/metrics', metricsRouter);
 
   // Error handling middleware (must be last)
   app.use(errorHandler);
@@ -145,12 +158,6 @@ async function startServer() {
   // WebSocket server for real-time updates
   const wss = new WebSocketServer({ server: httpServer });
   wss.on('connection', wsHandler);
-
-  // Metrics collection
-  app.use(metricsMiddleware([/\/metrics/]))
-
-  // Expose Prometheus metrics
-  app.use('/metrics', metricsRouter);
 
   // Start the server
   const PORT = config.server.port;
@@ -166,7 +173,7 @@ async function startServer() {
   process.on('SIGTERM', async () => {
     logger.info('SIGTERM received, shutting down gracefully...');
     httpServer.close(async () => {
-      await redis.disconnect();
+      // await redis.disconnect(); // Disabled for now
       await disconnectDatabase();
       logger.info('Server closed');
       process.exit(0);
@@ -176,7 +183,7 @@ async function startServer() {
   process.on('SIGINT', async () => {
     logger.info('SIGINT received, shutting down gracefully...');
     httpServer.close(async () => {
-      await redis.disconnect();
+      // await redis.disconnect(); // Disabled for now
       await disconnectDatabase();
       logger.info('Server closed');
       process.exit(0);
