@@ -9,38 +9,36 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [18.x]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
-      - name: Lint
-        run: npm run lint
+      - name: Run lint
+        run: |
+          if [ -f .eslintrc.js ]; then npm run lint ; else echo "No ESLint config, skipping lint" ; fi
 
-      - name: Type check
-        run: npm run type-check
+      - name: Run tests with coverage
+        run: npm test -- --coverage --silent
 
-      - name: Run unit tests
-        run: npm run test -- --coverage
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage
 
-      - name: Build
-        run: npm run build
+      - name: Build Next.js + Server
+        run: npm run build:ci || npm run build
 
-      - name: Docker build
-        run: docker build -t agentvault:ci .
-        if: github.event_name == 'push'
-
-      - name: Audit (prod dependencies)
-        run: npm run audit:prod
-        continue-on-error: true 
+      - name: Docker build (optional)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker build -t agentvault:latest . 

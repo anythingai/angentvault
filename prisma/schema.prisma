@@ -78,6 +78,7 @@ model Wallet {
   balance   String
   isActive  Boolean     @default(true)
   network   String      @default("base")
+  cdpAccountId String?  @unique
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 

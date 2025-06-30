@@ -30,4 +30,12 @@ module.exports = {
     '/node_modules/',
     '<rootDir>/src/server/__tests__/paywall.test.ts'
   ],
+  coverageThreshold: {
+    global: {
+      branches: 5,
+      functions: 5,
+      lines: 5,
+      statements: 5,
+    },
+  },
 }; 

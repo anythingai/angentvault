@@ -16,9 +16,10 @@ export const config: AppConfig = {
     maxConnections: parseInt(process.env.DB_MAX_CONNECTIONS || '10'),
     ssl: process.env.NODE_ENV === 'production',
   },
-  redis: {
-    url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`,
-    maxRetries: 3,
+  cache: {
+    maxKeys: parseInt(process.env.CACHE_MAX_KEYS || '100000'),
+    ttlDefault: parseInt(process.env.CACHE_TTL_DEFAULT || '3600'), // 1 hour default
+    checkPeriod: parseInt(process.env.CACHE_CHECK_PERIOD || '600'), // 10 minutes
   },
   aws: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',

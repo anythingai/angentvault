@@ -1,132 +1,133 @@
-import { createClient } from 'redis';
+import NodeCache from 'node-cache';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
-class Redis {
-  private client: any;
-  private isConnected: boolean = false;
-  private hasLoggedFailure: boolean = false;
-  private mockStorage: Map<string, string> = new Map();
+class NodeCacheAdapter {
+  private cache: NodeCache;
+  private isConnected: boolean = true; // Always connected for in-memory
+  private hasLoggedInfo: boolean = false;
 
   constructor() {
-    try {
-    this.client = createClient({
-      url: config.redis.url,
-        socket: {
-          connectTimeout: 2000,
-        },
+    // Initialize node-cache with settings from config
+    this.cache = new NodeCache({
+      stdTTL: config.cache.ttlDefault,
+      checkperiod: config.cache.checkPeriod,
+      useClones: true, // Clone objects for safety
+      deleteOnExpire: true, // Clean up expired keys
+      maxKeys: config.cache.maxKeys, // Set max keys from config
     });
 
-    this.client.on('error', (err: any) => {
-        if (this.isConnected || !this.hasLoggedFailure) {
-          this.logConnectionError(`Redis client error: ${err.code || err.message}`);
-        }
-        this.isConnected = false;
-    });
-
-    this.client.on('connect', () => {
-        logger.info('Redis client attempting to connect...');
-    });
-
-    this.client.on('ready', () => {
-        logger.info('Redis connected successfully');
-        this.isConnected = true;
-    });
-    } catch (error) {
-      this.logConnectionError('Redis initialization failed');
-      this.client = null;
-    }
+    this.logInfo('NodeCache initialized as Redis alternative for production');
   }
 
-  private logConnectionError(message: string) {
-    if (!this.hasLoggedFailure) {
-      logger.warn(`${message}. Falling back to in-memory cache for local development.`);
-      this.hasLoggedFailure = true;
+  private logInfo(message: string) {
+    if (!this.hasLoggedInfo) {
+      logger.info(`${message}. Using fast in-memory cache with node-cache.`);
+      this.hasLoggedInfo = true;
     }
   }
 
   async connect(): Promise<void> {
-    if (this.isConnected || !this.client) {
-      if (!this.client) this.logConnectionError('Redis not configured');
-      return;
-    }
-
-    try {
-      await this.client.connect();
-    } catch (error) {
-      this.logConnectionError('Redis connection failed');
-      this.isConnected = false;
+    // Always connected for in-memory cache
+    if (!this.hasLoggedInfo) {
+      this.logInfo('NodeCache ready');
     }
   }
 
   async disconnect(): Promise<void> {
-    if (this.isConnected && this.client) {
-      await this.client.disconnect();
-      logger.info('Redis disconnected successfully');
-    }
+    this.cache.flushAll();
+    logger.info('NodeCache disconnected and flushed');
   }
 
   getClient() {
-    return this.client;
+    return this.cache; // Return the cache instance
   }
 
   async set(key: string, value: string, ttl?: number): Promise<void> {
-    if (this.isConnected && this.client) {
     try {
       if (ttl) {
-        await this.client.setEx(key, ttl, value);
+        this.cache.set(key, value, ttl);
       } else {
-        await this.client.set(key, value);
+        this.cache.set(key, value);
       }
-        return;
-      } catch (e) {
-        // Fallthrough to memory cache if redis command fails
-      }
-    }
-    // Use memory cache as fallback
-      this.mockStorage.set(key, value);
-    if (ttl) {
-      setTimeout(() => {
-        this.mockStorage.delete(key);
-      }, ttl * 1000);
+    } catch (error) {
+      logger.error('NodeCache set error:', error);
+      throw error;
     }
   }
 
   async get(key: string): Promise<string | null> {
-    if (this.isConnected && this.client) {
     try {
-      return await this.client.get(key);
-      } catch (e) {
-        // Fallthrough to memory cache
-      }
+      const value = this.cache.get<string>(key);
+      return value !== undefined ? value : null;
+    } catch (error) {
+      logger.error('NodeCache get error:', error);
+      return null;
     }
-      return this.mockStorage.get(key) || null;
   }
 
   async del(key: string): Promise<number> {
-    if (this.isConnected && this.client) {
-      try {
-        return await this.client.del(key);
-      } catch (e) {
-        // Fallthrough
-      }
+    try {
+      const deleted = this.cache.del(key);
+      return deleted;
+    } catch (error) {
+      logger.error('NodeCache del error:', error);
+      return 0;
     }
-      const existed = this.mockStorage.has(key);
-      this.mockStorage.delete(key);
-      return existed ? 1 : 0;
   }
 
   async healthCheck(): Promise<boolean> {
-    if (this.isConnected && this.client) {
-      try {
-        return (await this.client.ping()) === 'PONG';
-      } catch (e) {
-        return false;
-      }
+    try {
+      // Test basic functionality
+      const testKey = 'health-check-test';
+      const testValue = 'ok';
+      this.cache.set(testKey, testValue, 1); // 1 second TTL
+      const retrieved = this.cache.get(testKey);
+      this.cache.del(testKey);
+      return retrieved === testValue;
+    } catch (error) {
+      logger.error('NodeCache health check failed:', error);
+      return false;
     }
-    // If not connected, the "health" depends on the fallback cache, which is always available.
-    return true;
+  }
+
+  // Additional utility methods for better Redis compatibility
+  async exists(key: string): Promise<boolean> {
+    return this.cache.has(key);
+  }
+
+  async keys(pattern?: string): Promise<string[]> {
+    const allKeys = this.cache.keys();
+    if (!pattern || pattern === '*') {
+      return allKeys;
+    }
+    // Simple pattern matching for Redis-like behavior
+    const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+    return allKeys.filter(key => regex.test(key));
+  }
+
+  async flushAll(): Promise<void> {
+    this.cache.flushAll();
+  }
+
+  // Get cache statistics
+  getStats() {
+    return this.cache.getStats();
+  }
+
+  // Get current key count
+  getKeyCount(): number {
+    return this.cache.keys().length;
+  }
+
+  // Memory usage estimation (basic)
+  getMemoryUsage(): { keys: number, estimatedSize: string } {
+    const stats = this.cache.getStats();
+    return {
+      keys: stats.keys,
+      estimatedSize: `${Math.round((stats.ksize + stats.vsize) / 1024)} KB`
+    };
   }
 }
 
-export const redis = new Redis(); 
+export const redis = new NodeCacheAdapter(); 

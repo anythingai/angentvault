@@ -253,7 +253,7 @@ export interface PinataUploadResponse {
 export interface AppConfig {
   server: ServerConfig;
   database: DatabaseConfig;
-  redis: RedisConfig;
+  cache: CacheConfig;
   aws: AWSConfig;
   cdp: CDPConfig;
   x402pay: X402PayConfig;
@@ -277,9 +277,10 @@ export interface DatabaseConfig {
   ssl: boolean;
 }
 
-export interface RedisConfig {
-  url: string;
-  maxRetries: number;
+export interface CacheConfig {
+  maxKeys: number;
+  ttlDefault: number;
+  checkPeriod: number;
 }
 
 export interface AWSConfig {

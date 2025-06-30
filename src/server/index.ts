@@ -9,6 +9,7 @@ import resolvers from './graphql/resolvers';
 import { connectDatabase, disconnectDatabase } from './database';
 import { config } from './config';
 import { logger } from './utils/logger';
+import { redis } from './redis';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { rateLimitMiddleware } from './middleware/rateLimit';
@@ -25,6 +26,7 @@ import agentRoutes from './routes/agents';
 import portfolioRoutes from './routes/portfolio';
 import marketRoutes from './routes/market';
 import paymentRoutes from './routes/payments';
+import webhooksRouter from './routes/webhooks';
 import { paywallMiddleware } from './middleware/paywall';
 
 async function startServer() {
@@ -62,8 +64,9 @@ async function startServer() {
     process.exit(1);
   }
 
-  // Skip Redis connection for now to avoid hanging issues
-  logger.info('Using memory cache fallback (Redis disabled for development)');
+  // Connect to NodeCache (always ready for in-memory cache)
+  await redis.connect();
+  logger.info('NodeCache initialized successfully');
 
   // Health check endpoint
   app.get('/health', async (req, res) => {
@@ -72,7 +75,7 @@ async function startServer() {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         database: 'connected',
-        redis: 'disabled (memory cache)',
+        cache: 'node-cache (in-memory)',
         version: process.env.npm_package_version || '1.0.0',
       });
     } catch (error) {
@@ -89,6 +92,9 @@ async function startServer() {
   app.use('/api/portfolio', authMiddleware, portfolioRoutes);
   app.use('/api/market', marketRoutes);
   app.use('/api/payments', authMiddleware, paymentRoutes);
+
+  // Public webhooks (no auth)
+  app.use('/webhooks', webhooksRouter);
 
   // Instantiate long-lived service objects once
   const services = {
@@ -173,7 +179,7 @@ async function startServer() {
   process.on('SIGTERM', async () => {
     logger.info('SIGTERM received, shutting down gracefully...');
     httpServer.close(async () => {
-      // await redis.disconnect(); // Disabled for now
+      await redis.disconnect();
       await disconnectDatabase();
       logger.info('Server closed');
       process.exit(0);
@@ -183,7 +189,7 @@ async function startServer() {
   process.on('SIGINT', async () => {
     logger.info('SIGINT received, shutting down gracefully...');
     httpServer.close(async () => {
-      // await redis.disconnect(); // Disabled for now
+      await redis.disconnect();
       await disconnectDatabase();
       logger.info('Server closed');
       process.exit(0);

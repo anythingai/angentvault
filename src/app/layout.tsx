@@ -2,8 +2,12 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from './components/Navbar'
+import dynamic from 'next/dynamic'
 
 const inter = Inter({ subsets: ['latin'] })
+
+// Lazy load wallet provider to avoid SSR issues
+const WalletProvider = dynamic(() => import('./providers/WalletProvider'), { ssr: false })
 
 export const metadata: Metadata = {
   title: 'AgentVault - Autonomous Crypto Investment Platform',
@@ -36,10 +40,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900`}>
+        <WalletProvider>
         <Navbar />
         <main className="min-h-screen">
         {children}
         </main>
+        </WalletProvider>
       </body>
     </html>
   )

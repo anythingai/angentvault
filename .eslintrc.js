@@ -18,12 +18,27 @@ module.exports = {
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:react/recommended',
+    'plugin:react-hooks/recommended',
   ],
   env: {
     browser: true,
     es2020: true,
     node: true,
   },
+  overrides: [
+    {
+      files: ['scripts/**/*.js'],
+      rules: {
+        'no-console': 'off',
+      },
+    },
+    {
+      files: ['src/server/**/*.ts'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
+    },
+  ],
   rules: {
     '@typescript-eslint/no-explicit-any': 'off', // Changed to off for build
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }], // Changed to warn
@@ -36,6 +51,7 @@ module.exports = {
     'no-console': 'warn',
     'no-var': 'warn', // Changed to warn
     'react-hooks/exhaustive-deps': 'warn',
+    'no-unused-vars': 'off',
   },
   ignorePatterns: [
     'node_modules/',

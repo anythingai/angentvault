@@ -3,28 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export default function LoginPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const router = useRouter();
-
-  const handleWalletConnect = async () => {
-    setIsConnecting(true);
-    try {
-      // Mock CDP Wallet connection - replace with actual implementation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      localStorage.setItem('token', 'demo-token');
-      localStorage.setItem('walletAddress', '0x742d35Cc6634C0532925a3b8D404d01A8dB9c0CF');
-      router.push('/dashboard');
-    } catch (error) {
-      // Handle wallet connection error
-      alert('Wallet connection failed. Please try again.');
-    } finally {
-      setIsConnecting(false);
-    }
-  };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,31 +41,13 @@ export default function LoginPage() {
         </div>
 
         <div className="crypto-card p-8 space-y-6">
-          {/* CDP Wallet Connection */}
-          <div>
-            <button
-              onClick={handleWalletConnect}
-              disabled={isConnecting}
-              className="w-full flex items-center justify-center px-4 py-3 border border-purple-500 rounded-lg text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {isConnecting ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Connecting...</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-3">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                  </svg>
-                  <span>Connect CDP Wallet</span>
-                </div>
-              )}
-            </button>
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              Recommended for full AgentVault functionality
-            </p>
+          {/* Wallet Connection via RainbowKit */}
+          <div className="flex justify-center">
+            <ConnectButton showBalance={false} />
           </div>
+          <p className="text-xs text-gray-400 mt-2 text-center">
+            CDP Wallet provisioning happens automatically after you connect
+          </p>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
