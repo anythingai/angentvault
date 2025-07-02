@@ -46,9 +46,9 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-demo-encryption-key}
       
       # Feature flags for hackathon demo
-      - ENABLE_DEMO_MODE=true
+      - ENABLE_DEMO_MODE=false
       - ENABLE_PAPER_TRADING=true
-      - ENABLE_REAL_TRADING=false
+      - ENABLE_REAL_TRADING=true
       - ENABLE_WEBSOCKET=true
       
       # Agent configuration

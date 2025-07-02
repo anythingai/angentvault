@@ -346,8 +346,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Discord**: <https://discord.gg/agentvault>
 - **Email**: <team@agentvault.ai>
 
+## 🚀 Production Deployment Checklist
+
+Before deploying AgentVault to production, ensure the following:
+
+- **Secrets & API Keys**: All secrets (JWT, encryption, API keys) are strong, unique, and injected via environment variables. No defaults or hardcoded values remain.
+- **Test Coverage**: All tests pass and coverage is ≥80% for branches, functions, lines, and statements.
+- **Demo Flags**: `ENABLE_DEMO_MODE=false` and `ENABLE_REAL_TRADING=true` in all deployment configs.
+- **Security**: All dependencies are up-to-date and free of vulnerabilities (`npm audit --production`). Rotate all API keys before launch. Enable IP whitelisting for API keys where possible.
+- **Monitoring**: Prometheus metrics, health checks, and alerting are enabled for uptime, error rates, and payment/trade failures.
+- **Wallet Security**: End users can export/backup their wallet keys. No private keys are ever exposed to the backend.
+- **Compliance**: All PRD and hackathon requirements are met. All user actions are authenticated and authorized. No test/demo data in production.
+- **Documentation**: This checklist is reviewed and all steps are complete before launch.
+
 ---
 
-**Built with ❤️ for the Coinbase Agents in Action Hackathon**
+**Built with ❤️ for the [Coinbase Agents in Action Hackathon]**
 
 *This project demonstrates the future of autonomous finance - where AI agents can independently manage portfolios, make payments, and operate entirely on decentralized infrastructure.*
