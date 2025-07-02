@@ -9,12 +9,13 @@ export default function TermsPage() {
       </div>
 
       <div className="crypto-card p-8">
-        <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-6">
-          <p className="text-blue-300 text-sm mb-0">
-            <strong>Demo Notice:</strong> This is a demonstration for the Coinbase Agents in Action Hackathon. 
-            These terms are for demo purposes only and do not constitute a legal agreement.
-          </p>
-        </div>
+        {process.env.NEXT_PUBLIC_ENV !== 'production' && (
+          <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-6">
+            <p className="text-blue-300 text-sm mb-0">
+              <strong>Demo Notice:</strong> This environment is running in DEV / TEST mode. Content below may not represent final legal terms.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-6">
           <section>

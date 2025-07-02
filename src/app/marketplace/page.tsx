@@ -31,61 +31,35 @@ export default function MarketplacePage() {
   }, []);
 
   const fetchMarketplaceAgents = async () => {
-    // Mock data - replace with actual GraphQL query
-    const mockAgents: MarketplaceAgent[] = [
-      {
-        id: '1',
-        name: 'DeFi Yield Master',
-        description: 'Advanced yield farming strategy across multiple protocols',
-        creator: '0x742d35...9c0CF',
-        price: 0.05,
-        priceType: 'PER_QUERY',
-        performance: {
-          winRate: 94.2,
-          totalReturn: 18.5,
-          subscriberCount: 156,
-          totalTrades: 1247
+    try {
+      const res = await fetch('/api/agents');
+      if (!res.ok) throw new Error('Failed to load agents');
+      const json = await res.json();
+
+      const rawAgents: any[] = json.agents || json.data || [];
+      const normalized: MarketplaceAgent[] = rawAgents.map((a) => ({
+        id: a.id,
+        name: a.name,
+        description: a.description,
+        creator: a.userId ? a.userId.slice(0, 10) + '...' : 'Unknown',
+        price: a.pricing?.price ?? 0,
+        priceType: (a.pricing?.type ?? 'FREE').toUpperCase(),
+        performance: typeof a.performance === 'string' ? JSON.parse(a.performance) : a.performance || {
+          winRate: 0,
+          totalReturn: 0,
+          subscriberCount: 0,
+          totalTrades: 0,
         },
-        tags: ['DeFi', 'Yield Farming', 'High Performance'],
-        rating: 4.8,
-        verified: true
-      },
-      {
-        id: '2',
-        name: 'Bitcoin Momentum Pro',
-        description: 'Technical analysis-based BTC trading strategy',
-        creator: '0x123abc...def456',
-        price: 25.00,
-        priceType: 'MONTHLY',
-        performance: {
-          winRate: 87.3,
-          totalReturn: 23.1,
-          subscriberCount: 89,
-          totalTrades: 892
-        },
-        tags: ['Bitcoin', 'Technical Analysis', 'Momentum'],
-        rating: 4.6,
-        verified: true
-      },
-      {
-        id: '3',
-        name: 'Arbitrage Hunter',
-        description: 'Cross-exchange arbitrage opportunities detector',
-        creator: '0x987xyz...321abc',
-        price: 0,
-        priceType: 'FREE',
-        performance: {
-          winRate: 76.8,
-          totalReturn: 12.3,
-          subscriberCount: 324,
-          totalTrades: 567
-        },
-        tags: ['Arbitrage', 'Multi-Exchange', 'Low Risk'],
-        rating: 4.2,
-        verified: false
-      }
-    ];
-    setAgents(mockAgents);
+        tags: a.tags ?? [],
+        rating: a.rating ?? 0,
+        verified: a.verified ?? false,
+      }));
+
+      setAgents(normalized);
+    } catch (err) {
+      // Handle error silently in production
+      setAgents([]);
+    }
   };
 
   const filteredAgents = agents.filter(agent => {
@@ -115,10 +89,34 @@ export default function MarketplacePage() {
 
   const handleSubscribe = async (agentId: string) => {
     try {
-      // Mock subscription - replace with actual x402pay integration
-      alert(`Subscription for agent ${agentId} initiated! x402pay payment will be processed.`);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Please log in to subscribe to agents');
+        return;
+      }
+
+      const response = await fetch('/api/payments/agent-query', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agentId,
+          queryType: 'subscription',
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        alert('Subscription initiated! Payment processed via x402pay.');
+        // Optionally refresh the page or update UI
+      } else {
+        alert(`Subscription failed: ${result.error}`);
+      }
     } catch (error) {
-      // eslint-disable-next-line no-console -- Replace with proper logger in production
+      // Handle error silently in production
+      alert('Subscription failed. Please try again.');
     }
   };
 

@@ -24,8 +24,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Set environment variables for Prisma during build
-ENV DATABASE_PROVIDER=sqlite
-ENV DATABASE_URL=file:./dev.db
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/agentvault"
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -71,8 +70,7 @@ EXPOSE 4000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-ENV DATABASE_PROVIDER=sqlite
-ENV DATABASE_URL=file:./dev.db
+ENV DATABASE_URL="postgresql://postgres:postgres@postgres:5432/agentvault"
 
 # Start both frontend and backend
 CMD ["sh", "-c", "npx prisma db push --skip-generate && npm run start"] 

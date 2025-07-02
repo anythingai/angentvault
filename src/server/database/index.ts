@@ -48,10 +48,14 @@ export const db = {
   trade: prisma.trade,
   wallet: prisma.wallet,
   payment: prisma.payment,
-  aiAnalysis: prisma.aIAnalysis,
   marketData: prisma.marketData,
-  ipfsData: prisma.iPFSData,
   candlestickData: prisma.candlestickData,
+  portfolio: prisma.portfolio,
+  alert: prisma.alert,
+  agentQuery: prisma.agentQuery,
+  iPFSData: prisma.iPFSData,
+  $transaction: prisma.$transaction.bind(prisma),
+  $disconnect: prisma.$disconnect.bind(prisma),
 };
 
 export function getClient(): PrismaClient {

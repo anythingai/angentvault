@@ -13,7 +13,7 @@ import { redis } from './redis';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/error';
 import { rateLimitMiddleware } from './middleware/rateLimit';
-import { wsHandler } from './websocket/handler';
+import { wsHandler, websocketHandler } from './websocket/handler';
 import { ApolloServerPluginLandingPageProductionDefault } from 'apollo-server-core';
 import { metricsRouter } from './metrics';
 import { metricsMiddleware } from './middleware/metrics';
@@ -28,6 +28,7 @@ import marketRoutes from './routes/market';
 import paymentRoutes from './routes/payments';
 import webhooksRouter from './routes/webhooks';
 import { paywallMiddleware } from './middleware/paywall';
+import { AgentOrchestrator } from './services/AgentOrchestrator';
 
 async function startServer() {
   const app = express();
@@ -86,9 +87,13 @@ async function startServer() {
     }
   });
 
+  // Instantiate AgentOrchestrator with WebSocket handler
+  const agentOrchestrator = new AgentOrchestrator(websocketHandler);
+  await agentOrchestrator.initialize();
+
   // API routes
   app.use('/api/auth', authRoutes);
-  app.use('/api/agents', authMiddleware, paywallMiddleware(), agentRoutes);
+  app.use('/api/agents', authMiddleware, paywallMiddleware(), agentRoutes(agentOrchestrator));
   app.use('/api/portfolio', authMiddleware, portfolioRoutes);
   app.use('/api/market', marketRoutes);
   app.use('/api/payments', authMiddleware, paymentRoutes);
@@ -164,6 +169,7 @@ async function startServer() {
   // WebSocket server for real-time updates
   const wss = new WebSocketServer({ server: httpServer });
   wss.on('connection', wsHandler);
+  await websocketHandler.initialize();
 
   // Start the server
   const PORT = config.server.port;

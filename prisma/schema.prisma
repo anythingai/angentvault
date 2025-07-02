@@ -6,123 +6,179 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+// User model for authentication and profile
 model User {
-  id            String           @id @default(cuid())
-  email         String           @unique
-  name          String
-  walletAddress String           @unique
-  isVerified    Boolean          @default(false)
-  subscription  String           @default("FREE")
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id            String   @id @default(cuid())
+  email         String?  @unique
+  passwordHash  String?  // Hashed password for authentication
+  name          String?
+  walletAddress String?  @unique // Made optional for registration flow
+  subscription  String   @default("basic") // basic, pro, enterprise
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
-  agents    Agent[]
-  wallets   Wallet[]
-  payments  Payment[]
-  analyses  AIAnalysis[]
-  ipfsData  IPFSData[]
-
-  @@map("users")
+  wallets       Wallet[]
+  agents        Agent[]
+  trades        Trade[]
+  payments      Payment[]
+  portfolios    Portfolio[]
+  alerts        Alert[]
+  ipfsData      IPFSData[]
 }
 
-model Agent {
-  id                String      @id @default(cuid())
-  name              String
-  description       String
-  ownerId           String
-  status            String       @default("PAUSED")
-  config            String
-  performance       String?
-  walletAddress     String?      // Added for CDP wallet integration
-  metadata          String?
-  lastExecutionTime DateTime?    // Added for tracking execution times
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  // Relations
-  owner    User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  trades   Trade[]
-  analyses AIAnalysis[]
-
-  @@map("agents")
-}
-
-model Trade {
-  id         String   @id @default(cuid())
-  agentId    String
-  type       String   // BUY, SELL
-  symbol     String   // e.g., "BTC/USDC"
-  amount     Float
-  price      Float
-  status     String   // PENDING, EXECUTED, FAILED, CANCELLED
-  txHash     String?
-  confidence Float?   // Added for storing AI confidence
-  metadata   String?  // Changed to String for SQLite compatibility
-  createdAt  DateTime @default(now())
-
-  // Relations
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@map("trades")
-}
-
+// CDP Wallet model for storing wallet information
 model Wallet {
-  id        String    @id @default(cuid())
-  address   String    @unique
-  userId    String
-  balance   String
-  isActive  Boolean     @default(true)
-  network   String      @default("base")
-  cdpAccountId String?  @unique
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("wallets")
-}
-
-model Payment {
-  id              String        @id @default(cuid())
+  id              String   @id @default(cuid())
   userId          String
-  amount          Float
-  currency        String
-  type            String
-  status          String        @default("PENDING")
-  x402payId       String?       @unique
-  transactionHash String?
-  metadata        String?       // Changed to String for SQLite compatibility
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  walletId        String   @unique // CDP wallet ID
+  addresses       String   // JSON string of wallet addresses
+  network         String   @default("base-sepolia")
+  encryptedData   String?  // Encrypted wallet data for recovery
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id])
+  trades          Trade[]
 
-  @@map("payments")
+  @@index([userId])
 }
 
-model AIAnalysis {
-  id         String       @id @default(cuid())
-  agentId    String?
-  userId     String
-  type       String
-  input      String
-  output     String
-  confidence Float
-  reasoning  String?
-  createdAt  DateTime     @default(now())
+// AI Agent model for autonomous trading agents
+model Agent {
+  id                String    @id @default(cuid())
+  userId            String
+  name              String
+  description       String?
+  status            String    @default("active") // active, paused, stopped
+  strategy          String    // Trading strategy configuration (JSON string)
+  riskParameters    String    // Risk management settings (JSON string)
+  performance       String?   // Performance metrics (JSON string)
+  aiModel           String    @default("bedrock-nova")
+  lastExecutionTime DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // Relations
-  agent Agent? @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id])
+  trades          Trade[]
+  agentQueries    AgentQuery[]
+  payments        Payment[]
 
-  @@map("ai_analyses")
+  @@index([userId])
+  @@index([status])
+}
+
+// Trade model for tracking all trades
+model Trade {
+  id              String   @id @default(cuid())
+  userId          String
+  agentId         String?
+  walletId        String
+  txHash          String   @unique
+  fromAsset       String
+  toAsset         String
+  amount          Float
+  price           Float
+  usdValue        Float
+  type            String   // buy, sell, swap
+  status          String   @default("pending") // pending, success, failed
+  metadata        String?  // Additional trade metadata (JSON string)
+  executedAt      DateTime @default(now())
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id])
+  agent           Agent?   @relation(fields: [agentId], references: [id])
+  wallet          Wallet   @relation(fields: [walletId], references: [id])
+
+  @@index([userId])
+  @@index([agentId])
+  @@index([status])
+  @@index([executedAt])
+}
+
+// Payment model for x402pay transactions
+model Payment {
+  id              String   @id @default(cuid())
+  userId          String
+  agentId         String?  // Link payment to a specific agent
+  amount          Float
+  currency        String   @default("USDC")
+  type            String   // query, subscription, feature
+  reference       String?  // Reference to what was paid for
+  txHash          String?  @unique
+  transactionHash String?  // Alternative field name for transaction hash
+  status          String   @default("pending") // pending, completed, failed
+  metadata        String?  // JSON string
+  createdAt       DateTime @default(now())
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id])
+  agent           Agent?   @relation(fields: [agentId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([agentId])
+}
+
+// Portfolio model for tracking user holdings
+model Portfolio {
+  id              String   @id @default(cuid())
+  userId          String
+  asset           String
+  balance         Float
+  balanceUSD      Float
+  avgBuyPrice     Float?
+  profitLoss      Float?
+  profitLossPerc  Float?
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  user            User     @relation(fields: [userId], references: [id])
+  
+  @@unique([userId, asset])
+  @@index([userId])
+}
+
+// AgentQuery model for tracking monetized agent queries
+model AgentQuery {
+  id              String   @id @default(cuid())
+  agentId         String
+  queryerId       String   // User who queried the agent
+  query           String
+  response        String   // JSON string response
+  price           Float
+  paymentId       String?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  agent           Agent    @relation(fields: [agentId], references: [id])
+  
+  @@index([agentId])
+  @@index([queryerId])
+}
+
+// Alert model for price alerts and notifications
+model Alert {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String   // price, portfolio, news
+  condition       String   // Alert conditions (JSON string)
+  status          String   @default("active") // active, triggered, disabled
+  lastTriggered   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
 }
 
 model MarketData {
@@ -172,5 +228,3 @@ model IPFSData {
 
   @@map("ipfs_data")
 }
-
-// Note: SQLite doesn't support enums, so we use strings with comments indicating valid values 

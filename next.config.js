@@ -4,7 +4,12 @@ const nextConfig = {
   swcMinify: true,
   output: 'standalone',
   
-  // Disable problematic features for demo
+  // SWC compiler options
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
+  
+  // Disable problematic features
   experimental: {},
   
   // API routes configuration  
@@ -19,11 +24,11 @@ const nextConfig = {
   
   // Image optimization
   images: {
-    domains: ['localhost'],
+    domains: ['localhost', 'cdn.coinbase.com', 'assets.coingecko.com'],
   },
   
   // Webpack configuration
-  webpack: (config, { isServer }) => {
+  webpack: (config, { _dev, isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -32,6 +37,22 @@ const nextConfig = {
         tls: false,
       };
     }
+
+    // Fix for RainbowKit build issues
+    config.externals.push('pino-pretty', 'lokijs', 'encoding');
+    
+    // Handle ESM modules properly
+    config.experiments = {
+      ...config.experiments,
+      topLevelAwait: true,
+    };
+
+    // Skip problematic files during build
+    config.module.rules.push({
+      test: /HeartbeatWorker/,
+      type: 'javascript/auto',
+    });
+
     return config;
   },
 };

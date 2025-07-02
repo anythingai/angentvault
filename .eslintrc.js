@@ -27,21 +27,50 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['scripts/**/*.js'],
+      files: ['scripts/**/*.js', '*.config.js', 'start.js'],
       rules: {
         'no-console': 'off',
+        '@typescript-eslint/no-require-imports': 'off', // Allow require in Node.js scripts
+        '@typescript-eslint/no-unused-vars': ['warn', { 
+          argsIgnorePattern: '^_', 
+          varsIgnorePattern: '^(error|err|e|fixError|_)', 
+          caughtErrorsIgnorePattern: '^(error|err|e|fixError|_)' 
+        }],
       },
     },
     {
       files: ['src/server/**/*.ts'],
       rules: {
         '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/no-require-imports': 'off', // Allow require in server code
+      },
+    },
+    {
+      files: ['src/**/*.tsx', 'src/**/*.ts'],
+      rules: {
+        '@typescript-eslint/no-unused-vars': ['warn', { 
+          argsIgnorePattern: '^_', 
+          varsIgnorePattern: '^(error|err|e|fixError|_)', 
+          caughtErrorsIgnorePattern: '^(error|err|e|fixError|_)' 
+        }],
+      },
+    },
+    {
+      files: ['src/types/**/*.d.ts'],
+      rules: {
+        '@typescript-eslint/no-empty-object-type': 'off', // Allow empty interfaces in type definitions
       },
     },
   ],
   rules: {
     '@typescript-eslint/no-explicit-any': 'off', // Changed to off for build
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }], // Changed to warn
+    '@typescript-eslint/no-unused-vars': ['warn', { 
+      argsIgnorePattern: '^_', 
+      varsIgnorePattern: '^(error|err|e|_)', 
+      caughtErrorsIgnorePattern: '^(error|err|e|_)' 
+    }], // Changed to warn
+    '@typescript-eslint/no-require-imports': 'warn', // Warn on require imports by default
+    '@typescript-eslint/no-empty-object-type': 'warn', // Warn on empty object types
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-non-null-assertion': 'off',
     '@typescript-eslint/no-namespace': 'off', // Allow namespaces

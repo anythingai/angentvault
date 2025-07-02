@@ -1,209 +1,210 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface Agent {
   id: string;
   name: string;
-  description: string;
-  status: 'ACTIVE' | 'PAUSED' | 'STOPPED' | 'ERROR';
-  config: {
-    riskTolerance: 'conservative' | 'moderate' | 'aggressive';
-    tradingPairs: string[];
-    strategies: string[];
-    maxTradeSize: number;
-    chargePerTrade: boolean;
-    tradeFee: number;
-  };
-  performance: {
-    totalTrades: number;
-    successfulTrades: number;
-    totalReturn: number;
-    totalReturnPercentage: number;
-    avgTradeSize: number;
-    winRate: number;
-    sharpeRatio: number;
-    maxDrawdown: number;
-  };
-  revenue: {
-    totalEarned: number;
-    queriesProcessed: number;
-    subscriberCount: number;
-    revenueThisMonth: number;
-  };
-  lastExecutionTime?: string;
+  description: string | null;
+  status: 'active' | 'paused' | 'stopped' | 'error';
+  strategy: string; // JSON string
+  riskParameters: string; // JSON string
+  performance: string | null; // JSON string
   createdAt: string;
+  lastExecutionTime?: string;
 }
 
 interface Trade {
   id: string;
-  agentId: string;
-  type: 'BUY' | 'SELL';
-  symbol: string;
+  agentId: string | null;
+  type: 'buy' | 'sell';
+  fromAsset: string;
+  toAsset: string;
   amount: number;
   price: number;
-  status: 'EXECUTED' | 'PENDING' | 'FAILED';
-  timestamp: string;
-  confidence: number;
+  status: 'pending' | 'success' | 'failed';
+  executedAt: string;
+  usdValue: number;
 }
 
+interface MonetizationData {
+  totalEarned: number;
+  queriesProcessed: number;
+  subscriberCount: number;
+  revenueThisMonth: number;
+}
+
+const fetchAgents = async (): Promise<Agent[]> => {
+  const token = localStorage.getItem('token');
+  const res = await fetch('/api/agents', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch agents');
+  }
+  const data = await res.json();
+  return data.agents;
+};
+
+const fetchRecentTrades = async (agentId: string | null): Promise<Trade[]> => {
+    if (!agentId) return [];
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/agents/${agentId}/trades`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch recent trades');
+    }
+    const data = await res.json();
+    return data.trades;
+};
+
+const fetchMonetizationData = async (agentId: string | null): Promise<MonetizationData> => {
+    if (!agentId) return { totalEarned: 0, queriesProcessed: 0, subscriberCount: 0, revenueThisMonth: 0 };
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/agents/${agentId}/monetization`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch monetization data');
+    }
+    return res.json();
+};
+
+const updateAgentStatus = async ({ agentId, status }: { agentId: string; status: string }) => {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`/api/agents/${agentId}`, {
+    method: 'PUT',
+    headers: { 
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to update agent status');
+}
+  return res.json();
+};
+
 export default function AgentManagement() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'performance' | 'monetization' | 'settings'>('overview');
+  const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    fetchAgents();
-    fetchRecentTrades();
-  }, []);
+    const connectWebSocket = () => {
+      const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:4000';
+      ws.current = new WebSocket(wsUrl);
 
-  const fetchAgents = async () => {
-    // Mock data - replace with actual GraphQL query
-    const mockAgents: Agent[] = [
-      {
-        id: '1',
-        name: 'DeFi Yield Hunter',
-        description: 'Automated yield farming across multiple DeFi protocols',
-        status: 'ACTIVE',
-        config: {
-          riskTolerance: 'moderate',
-          tradingPairs: ['ETH/USDC', 'BTC/USDC'],
-          strategies: ['yield_farming', 'liquidity_provision'],
-          maxTradeSize: 1000,
-          chargePerTrade: true,
-          tradeFee: 0.02
-        },
-        performance: {
-          totalTrades: 156,
-          successfulTrades: 142,
-          totalReturn: 1250.75,
-          totalReturnPercentage: 12.5,
-          avgTradeSize: 350,
-          winRate: 91.0,
-          sharpeRatio: 1.85,
-          maxDrawdown: -3.2
-        },
-        revenue: {
-          totalEarned: 47.85,
-          queriesProcessed: 892,
-          subscriberCount: 23,
-          revenueThisMonth: 12.40
-        },
-        lastExecutionTime: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        createdAt: '2024-01-15T10:30:00Z'
-      },
-      {
-        id: '2',
-        name: 'BTC Momentum Trader',
-        description: 'Bitcoin trend-following strategy with technical analysis',
-        status: 'PAUSED',
-        config: {
-          riskTolerance: 'aggressive',
-          tradingPairs: ['BTC/USDC'],
-          strategies: ['momentum', 'technical_analysis'],
-          maxTradeSize: 2000,
-          chargePerTrade: false,
-          tradeFee: 0
-        },
-        performance: {
-          totalTrades: 89,
-          successfulTrades: 67,
-          totalReturn: 850.25,
-          totalReturnPercentage: 8.5,
-          avgTradeSize: 750,
-          winRate: 75.3,
-          sharpeRatio: 1.45,
-          maxDrawdown: -8.7
-        },
-        revenue: {
-          totalEarned: 0,
-          queriesProcessed: 0,
-          subscriberCount: 0,
-          revenueThisMonth: 0
-        },
-        lastExecutionTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        createdAt: '2024-02-01T14:20:00Z'
+      ws.current.onopen = () => {
+        // WebSocket connected - ready for real-time updates
+      };
+
+      ws.current.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        switch (message.type) {
+          case 'agent_update':
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
+            queryClient.invalidateQueries({ queryKey: ['agent', message.payload.agentId] });
+            break;
+          case 'trade_executed':
+            queryClient.invalidateQueries({ queryKey: ['recentTrades', message.payload.agentId] });
+            queryClient.invalidateQueries({ queryKey: ['agent', message.payload.agentId] });
+            break;
+          default:
+            break;
+        }
+      };
+
+      ws.current.onclose = () => {
+        // WebSocket disconnected - attempt to reconnect
+        setTimeout(connectWebSocket, 5000);
+      };
+
+      ws.current.onerror = (_error) => {
+        // WebSocket error occurred
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (ws.current) {
+        ws.current.close();
       }
-    ];
+    };
+  }, [queryClient]);
 
-    setAgents(mockAgents);
-    setSelectedAgent(mockAgents[0]);
-    setIsLoading(false);
-  };
+  const { data: agents = [], isLoading: isLoadingAgents } = useQuery<Agent[]>({
+    queryKey: ['agents'],
+    queryFn: fetchAgents,
+  });
 
-  const fetchRecentTrades = async () => {
-    const mockTrades: Trade[] = [
-      {
-        id: '1',
-        agentId: '1',
-        type: 'BUY',
-        symbol: 'ETH/USDC',
-        amount: 350,
-        price: 3150.25,
-        status: 'EXECUTED',
-        timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-        confidence: 0.87
-      },
-      {
-        id: '2',
-        agentId: '1',
-        type: 'SELL',
-        symbol: 'BTC/USDC',
-        amount: 500,
-        price: 45200.50,
-        status: 'EXECUTED',
-        timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-        confidence: 0.92
-      }
-    ];
-    setRecentTrades(mockTrades);
-  };
+  const { data: recentTrades = [], isLoading: isLoadingTrades } = useQuery<Trade[]>({
+    queryKey: ['recentTrades', selectedAgentId],
+    queryFn: () => fetchRecentTrades(selectedAgentId),
+    enabled: !!selectedAgentId,
+  });
 
-  const handleAgentAction = async (agentId: string, action: 'start' | 'pause' | 'stop') => {
-    try {
-      // Mock API call - replace with actual GraphQL mutation
-      setAgents(prev => prev.map(agent => 
-        agent.id === agentId 
-          ? { ...agent, status: action === 'start' ? 'ACTIVE' : action === 'pause' ? 'PAUSED' : 'STOPPED' }
-          : agent
-      ));
-    } catch (error) {
-      // eslint-disable-next-line no-console -- Replace with proper logger in production
-      /**
-       * Intentionally kept silent for demo purposes.
-       * Use server-side logging or toast notifications in real implementation.
-       */
+  const { data: monetizationData } = useQuery<MonetizationData>({
+    queryKey: ['monetizationData', selectedAgentId],
+    queryFn: () => fetchMonetizationData(selectedAgentId),
+    enabled: !!selectedAgentId,
+  });
+
+  const agentStatusMutation = useMutation({
+    mutationFn: updateAgentStatus,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
+
+  useEffect(() => {
+    if (!selectedAgentId && agents.length > 0) {
+      setSelectedAgentId(agents[0].id);
     }
+  }, [agents, selectedAgentId]);
+
+  const selectedAgent = agents.find(agent => agent.id === selectedAgentId);
+
+  const handleAgentAction = (agentId: string, action: 'start' | 'pause' | 'stop') => {
+    let status: 'active' | 'paused' | 'stopped' = 'paused';
+    if(action === 'start') status = 'active';
+    if(action === 'stop') status = 'stopped';
+    agentStatusMutation.mutate({ agentId, status });
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ACTIVE': return 'text-green-400 bg-green-400/20';
-      case 'PAUSED': return 'text-yellow-400 bg-yellow-400/20';
-      case 'STOPPED': return 'text-gray-400 bg-gray-400/20';
-      case 'ERROR': return 'text-red-400 bg-red-400/20';
+      case 'active': return 'text-green-400 bg-green-400/20';
+      case 'paused': return 'text-yellow-400 bg-yellow-400/20';
+      case 'stopped': return 'text-gray-400 bg-gray-400/20';
+      case 'error': return 'text-red-400 bg-red-400/20';
       default: return 'text-gray-400 bg-gray-400/20';
     }
   };
 
+  const parsedPerformance = selectedAgent && selectedAgent.performance ? JSON.parse(selectedAgent.performance) : {};
+
   const performanceData = selectedAgent ? [
-    { name: 'Win Rate', value: selectedAgent.performance.winRate },
-    { name: 'Sharpe Ratio', value: selectedAgent.performance.sharpeRatio * 20 }, // Scale for visualization
-    { name: 'Total Return %', value: selectedAgent.performance.totalReturnPercentage },
-    { name: 'Max Drawdown', value: Math.abs(selectedAgent.performance.maxDrawdown) }
+    { name: 'Win Rate', value: parsedPerformance.winRate || 0 },
+    { name: 'Sharpe Ratio', value: (parsedPerformance.sharpeRatio || 0) * 20 }, // Scale for visualization
+    { name: 'Total Return %', value: parsedPerformance.totalReturnPercentage || 0 },
+    { name: 'Max Drawdown', value: Math.abs(parsedPerformance.maxDrawdown || 0) }
   ] : [];
 
-  const revenueData = selectedAgent ? [
-    { name: 'Query Fees', value: selectedAgent.revenue.totalEarned * 0.7 },
-    { name: 'Subscriptions', value: selectedAgent.revenue.totalEarned * 0.3 }
+  const revenueData = monetizationData ? [
+    { name: 'Query Fees', value: monetizationData.totalEarned * 0.7 },
+    { name: 'Subscriptions', value: monetizationData.totalEarned * 0.3 }
   ] : [];
 
   const colors = ['#8B5CF6', '#06B6D4', '#10B981', '#F59E0B'];
 
-  if (isLoading) {
+  if (isLoadingAgents) {
     return (
       <div className="crypto-card p-6">
         <div className="animate-pulse space-y-4">
@@ -222,13 +223,15 @@ export default function AgentManagement() {
     <div className="space-y-6">
       {/* Agent Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {agents.map((agent) => (
+        {agents.map((agent) => {
+          const performance = agent.performance ? JSON.parse(agent.performance) : {};
+          return (
           <div 
             key={agent.id} 
             className={`crypto-card p-6 cursor-pointer transition-all hover:border-purple-500 ${
               selectedAgent?.id === agent.id ? 'border-purple-500 ring-1 ring-purple-500' : ''
             }`}
-            onClick={() => setSelectedAgent(agent)}
+              onClick={() => setSelectedAgentId(agent.id)}
           >
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -236,7 +239,7 @@ export default function AgentManagement() {
                 <p className="text-gray-400 text-sm">{agent.description}</p>
               </div>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(agent.status)}`}>
-                {agent.status}
+                  {agent.status.toUpperCase()}
               </span>
             </div>
             
@@ -244,31 +247,31 @@ export default function AgentManagement() {
               <div>
                 <span className="text-gray-400">Total Return:</span>
                 <div className="text-green-400 font-semibold">
-                  +${agent.performance.totalReturn.toLocaleString()}
+                    +${(performance.totalReturn || 0).toLocaleString()}
                 </div>
               </div>
               <div>
                 <span className="text-gray-400">Win Rate:</span>
                 <div className="text-blue-400 font-semibold">
-                  {agent.performance.winRate.toFixed(1)}%
+                    {(performance.winRate || 0).toFixed(1)}%
                 </div>
               </div>
               <div>
                 <span className="text-gray-400">Revenue:</span>
                 <div className="text-purple-400 font-semibold">
-                  ${agent.revenue.totalEarned.toFixed(2)}
+                    $0.00
                 </div>
               </div>
               <div>
                 <span className="text-gray-400">Trades:</span>
                 <div className="text-white font-semibold">
-                  {agent.performance.totalTrades}
+                    {performance.totalTrades || 0}
                 </div>
               </div>
             </div>
 
             <div className="flex space-x-2 mt-4">
-              {agent.status === 'ACTIVE' ? (
+                {agent.status === 'active' ? (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -300,7 +303,8 @@ export default function AgentManagement() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Detailed Agent View */}
@@ -353,20 +357,20 @@ export default function AgentManagement() {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-gray-400">Risk Tolerance:</span>
-                    <span className="text-white capitalize">{selectedAgent.config.riskTolerance}</span>
+                    <span className="text-white capitalize">{JSON.parse(selectedAgent.riskParameters).riskTolerance || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Trading Pairs:</span>
-                    <span className="text-white">{selectedAgent.config.tradingPairs.join(', ')}</span>
+                    <span className="text-white">{JSON.parse(selectedAgent.strategy).tradingPairs?.join(', ') || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Max Trade Size:</span>
-                    <span className="text-white">${selectedAgent.config.maxTradeSize}</span>
+                    <span className="text-white">${JSON.parse(selectedAgent.riskParameters).maxTradeSize || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Monetization:</span>
-                    <span className={selectedAgent.config.chargePerTrade ? 'text-green-400' : 'text-gray-400'}>
-                      {selectedAgent.config.chargePerTrade ? `$${selectedAgent.config.tradeFee} per query` : 'Disabled'}
+                    <span className={JSON.parse(selectedAgent.strategy).chargePerTrade ? 'text-green-400' : 'text-gray-400'}>
+                      {JSON.parse(selectedAgent.strategy).chargePerTrade ? `$${JSON.parse(selectedAgent.strategy).tradeFee} per query` : 'Disabled'}
                     </span>
                   </div>
                 </div>
@@ -381,19 +385,19 @@ export default function AgentManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">Total Trades</div>
-                    <div className="text-2xl font-bold text-white">{selectedAgent.performance.totalTrades}</div>
+                    <div className="text-2xl font-bold text-white">{parsedPerformance.totalTrades || 0}</div>
                   </div>
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">Win Rate</div>
-                    <div className="text-2xl font-bold text-green-400">{selectedAgent.performance.winRate.toFixed(1)}%</div>
+                    <div className="text-2xl font-bold text-green-400">{(parsedPerformance.winRate || 0).toFixed(1)}%</div>
                   </div>
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">Sharpe Ratio</div>
-                    <div className="text-2xl font-bold text-blue-400">{selectedAgent.performance.sharpeRatio}</div>
+                    <div className="text-2xl font-bold text-blue-400">{parsedPerformance.sharpeRatio || 0}</div>
                   </div>
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">Max Drawdown</div>
-                    <div className="text-2xl font-bold text-red-400">{selectedAgent.performance.maxDrawdown}%</div>
+                    <div className="text-2xl font-bold text-red-400">{parsedPerformance.maxDrawdown || 0}%</div>
                   </div>
                 </div>
               </div>
@@ -401,22 +405,22 @@ export default function AgentManagement() {
               <div>
                 <h3 className="text-lg font-semibold text-white mb-4">Recent Trades</h3>
                 <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {recentTrades.filter(trade => trade.agentId === selectedAgent.id).map((trade) => (
+                  {isLoadingTrades ? <p>Loading trades...</p> : recentTrades.map((trade) => (
                     <div key={trade.id} className="bg-gray-800/50 rounded-lg p-3">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center space-x-2">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            trade.type === 'BUY' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+                            trade.type === 'buy' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
                           }`}>
-                            {trade.type}
+                            {trade.type.toUpperCase()}
                           </span>
-                          <span className="text-white font-medium">{trade.symbol}</span>
+                          <span className="text-white font-medium">{trade.fromAsset}/{trade.toAsset}</span>
                         </div>
-                        <span className="text-green-400">${trade.amount}</span>
+                        <span className="text-green-400">${trade.usdValue}</span>
                       </div>
                       <div className="flex justify-between text-sm text-gray-400 mt-1">
-                        <span>Confidence: {(trade.confidence * 100).toFixed(0)}%</span>
-                        <span>{new Date(trade.timestamp).toLocaleTimeString()}</span>
+                        <span></span>
+                        <span>{new Date(trade.executedAt).toLocaleTimeString()}</span>
                       </div>
                     </div>
                   ))}
@@ -445,7 +449,7 @@ export default function AgentManagement() {
                         ))}
                       </Pie>
                       <Tooltip 
-                        formatter={(value: any) => [`$${value.toFixed(2)}`, 'Revenue']}
+                        formatter={(value: any) => [`$${value ? value.toFixed(2) : '0.00'}`, 'Revenue']}
                         contentStyle={{
                           backgroundColor: '#1F2937',
                           border: '1px solid #374151',
@@ -462,19 +466,19 @@ export default function AgentManagement() {
                 <div className="space-y-4">
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">Total Earned</div>
-                    <div className="text-2xl font-bold text-green-400">${selectedAgent.revenue.totalEarned.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-green-400">${(monetizationData?.totalEarned || 0).toFixed(2)}</div>
                   </div>
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">This Month</div>
-                    <div className="text-xl font-bold text-purple-400">${selectedAgent.revenue.revenueThisMonth.toFixed(2)}</div>
+                    <div className="text-xl font-bold text-purple-400">${(monetizationData?.revenueThisMonth || 0).toFixed(2)}</div>
                   </div>
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">Subscribers</div>
-                    <div className="text-xl font-bold text-blue-400">{selectedAgent.revenue.subscriberCount}</div>
+                    <div className="text-xl font-bold text-blue-400">{monetizationData?.subscriberCount || 0}</div>
                   </div>
                   <div className="bg-gray-800/50 rounded-lg p-4">
                     <div className="text-gray-400 text-sm">Queries Processed</div>
-                    <div className="text-xl font-bold text-white">{selectedAgent.revenue.queriesProcessed}</div>
+                    <div className="text-xl font-bold text-white">{monetizationData?.queriesProcessed || 0}</div>
                   </div>
                 </div>
               </div>
@@ -500,7 +504,7 @@ export default function AgentManagement() {
                       <select
                         id="risk-tolerance-select"
                         aria-label="Risk Tolerance"
-                        value={selectedAgent.config.riskTolerance}
+                        defaultValue={selectedAgent.riskParameters ? JSON.parse(selectedAgent.riskParameters).riskTolerance : 'moderate'}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
                       >
                         <option value="conservative">Conservative</option>
@@ -516,7 +520,7 @@ export default function AgentManagement() {
                       <input
                         type="number"
                         aria-label="Maximum Trade Size"
-                        value={selectedAgent.config.maxTradeSize}
+                        defaultValue={selectedAgent.riskParameters ? JSON.parse(selectedAgent.riskParameters).maxTradeSize : 1000}
                         placeholder="Maximum trade size in USDC"
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
                       />
@@ -531,16 +535,16 @@ export default function AgentManagement() {
                       <label className="flex items-center space-x-2">
                         <input
                           type="checkbox"
-                          checked={selectedAgent.config.chargePerTrade}
+                          defaultChecked={selectedAgent.strategy ? JSON.parse(selectedAgent.strategy).chargePerTrade : false}
                           className="form-checkbox h-4 w-4 text-purple-600"
                         />
                         <span className="text-white">Enable x402pay monetization</span>
                       </label>
-                      {selectedAgent.config.chargePerTrade && (
+                      {(selectedAgent.strategy && JSON.parse(selectedAgent.strategy).chargePerTrade) && (
                         <input
                           type="number"
                           step="0.001"
-                          value={selectedAgent.config.tradeFee}
+                          defaultValue={selectedAgent.strategy ? JSON.parse(selectedAgent.strategy).tradeFee : 0}
                           placeholder="Fee per query (USDC)"
                           className="w-full mt-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
                         />

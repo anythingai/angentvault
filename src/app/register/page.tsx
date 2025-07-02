@@ -14,43 +14,53 @@ export default function RegisterPage() {
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
   const router = useRouter();
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleWalletConnect = async () => {
-    setIsCreating(true);
     try {
-      // Mock CDP Wallet connection and account creation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      localStorage.setItem('token', 'demo-token');
-      localStorage.setItem('walletAddress', '0x742d35Cc6634C0532925a3b8D404d01A8dB9c0CF');
-      router.push('/dashboard');
+      setIsConnecting(true);
+      // Would implement real CDP Wallet connection here
+      setError('Wallet connection not implemented in this demo version');
     } catch (error) {
-      // Handle account creation error
-      alert('Account creation failed. Please try again.');
+      setError('Failed to connect wallet. Please try again.');
     } finally {
-      setIsCreating(false);
+      setIsConnecting(false);
     }
   };
 
-  const handleEmailRegister = async (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+    if (!formData.email || !formData.password || !formData.confirmPassword) {
+      setError('Please fill in all fields');
       return;
     }
-    if (!acceptTerms) {
-      alert('Please accept the terms of service');
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
     
-    setIsCreating(true);
     try {
-      // Mock email registration - replace with actual implementation
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      localStorage.setItem('token', 'demo-token');
-      router.push('/dashboard');
+      setIsCreating(true);
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          name: formData.name,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        localStorage.setItem('token', result.token);
+        router.push('/dashboard');
+      } else {
+        setError(result.error || 'Registration failed');
+      }
     } catch (error) {
-      // Handle registration error
-      alert('Registration failed. Please try again.');
+      setError('Registration failed. Please try again.');
     } finally {
       setIsCreating(false);
     }
@@ -81,20 +91,20 @@ export default function RegisterPage() {
           <div>
             <button
               onClick={handleWalletConnect}
-              disabled={isCreating}
+              disabled={isConnecting}
               className="w-full flex items-center justify-center px-4 py-3 border border-purple-500 rounded-lg text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {isCreating ? (
+              {isConnecting ? (
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Creating Account...</span>
+                  <span>Connecting...</span>
                 </div>
               ) : (
                 <div className="flex items-center space-x-3">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                   </svg>
-                  <span>Create Account with CDP Wallet</span>
+                  <span>Connect with CDP Wallet</span>
                 </div>
               )}
             </button>
@@ -113,7 +123,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Email Registration Form */}
-          <form onSubmit={handleEmailRegister} className="space-y-4">
+          <form onSubmit={handleEmailSubmit} className="space-y-4">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
                 Full Name

@@ -121,26 +121,59 @@ export class X402PayService {
   }
 
   async processRevenueShare(agentId: string, revenue: number): Promise<any> {
-    const agentOwner = await this.getAgentOwnerAddress(agentId);
-    const platformFee = revenue * 0.1; // 10% platform fee
-    const ownerShare = revenue - platformFee;
+    try {
+      const agentOwner = await this.getAgentOwnerAddress(agentId);
+      const platformFee = revenue * 0.1; // 10% platform fee
+      const ownerShare = revenue - platformFee;
 
-    // For revenue sharing, we'd typically use CDP Wallet to distribute funds
-    // This would integrate with your CDPWalletService
-    logger.info('Revenue share processed', {
-        agentId,
-      agentOwner,
-      ownerShare,
-      platformFee,
-      totalRevenue: revenue
-    });
+      // Import CDPWalletService dynamically to avoid circular dependencies
+      const { CDPWalletService } = await import('./CDPWalletService');
+      const cdpWalletService = new CDPWalletService();
 
-    return {
-      success: true,
-      agentOwnerShare: ownerShare,
-        platformFee,
-      totalRevenue: revenue
-    };
+      // Execute actual USDC transfer to agent owner
+      if (ownerShare > 0) {
+        const transferResult = await cdpWalletService.transfer(
+          'system', // Platform wallet identifier  
+          agentOwner,
+          ownerShare,
+          'USDC'
+        );
+
+        logger.info('Revenue share transfer completed', {
+          agentId,
+          agentOwner,
+          ownerShare,
+          platformFee,
+          totalRevenue: revenue,
+          transactionHash: transferResult.transactionHash
+        });
+
+        return {
+          success: true,
+          agentOwnerShare: ownerShare,
+          platformFee,
+          totalRevenue: revenue,
+          transactionHash: transferResult.transactionHash
+        };
+      } else {
+        logger.warn('Revenue share amount too small to transfer', {
+          agentId,
+          revenue,
+          ownerShare
+        });
+        
+        return {
+          success: false,
+          reason: 'Revenue share amount too small to process',
+          agentOwnerShare: ownerShare,
+          platformFee,
+          totalRevenue: revenue
+        };
+      }
+    } catch (error: unknown) {
+      logger.error('Revenue share transfer failed:', error);
+      throw new Error(`Revenue share processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   async checkPaymentStatus(paymentId: string): Promise<any> {
@@ -172,7 +205,7 @@ export class X402PayService {
     return addresses[network] || addresses['base-sepolia'];
   }
 
-  private getQueryPricing(queryType: string): { amount: number; description: string } {
+  public getQueryPricing(queryType: string): { amount: number; description: string } {
     const pricing = {
       market_analysis: { amount: 0.01, description: 'AI Market sentiment analysis' },
       price_prediction: { amount: 0.02, description: 'AI Price prediction query' },

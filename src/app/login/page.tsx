@@ -1,26 +1,83 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount } from 'wagmi';
 
 export default function LoginPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const router = useRouter();
+  const { isConnected, address } = useAccount();
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleWalletLogin = useCallback(async (walletAddress: string) => {
     setIsConnecting(true);
     try {
-      // Mock email login - replace with actual authentication
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      localStorage.setItem('token', 'demo-token');
-      router.push('/dashboard');
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: walletAddress.toLowerCase()
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        localStorage.setItem('token', data.token);
+        router.push('/dashboard');
+      } else {
+        alert('Wallet authentication failed. Please try again.');
+      }
     } catch (error) {
-      // Handle login error
+      // eslint-disable-next-line no-console
+      console.error('Wallet login failed:', error);
+      alert('Wallet authentication failed. Please try again.');
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [router]);
+
+  // Redirect to dashboard when wallet is connected
+  useEffect(() => {
+    if (isConnected && address) {
+      // Authenticate with wallet address
+      handleWalletLogin(address);
+    }
+  }, [isConnected, address, router, handleWalletLogin]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsConnecting(true);
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.toLowerCase(),
+          password: password
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        localStorage.setItem('token', data.token);
+        router.push('/dashboard');
+      } else {
+        alert('Email authentication failed. Please try again.');
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Login failed:', error);
       alert('Login failed. Please try again.');
     } finally {
       setIsConnecting(false);
@@ -59,7 +116,7 @@ export default function LoginPage() {
           </div>
 
           {/* Email Login Form */}
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
                 Email Address

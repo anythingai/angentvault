@@ -2,6 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { config } from '../config';
 import { logger } from '../utils/logger';
+import { db } from '../database';
 
 export class PinataService {
   private jwt: string;
@@ -12,7 +13,7 @@ export class PinataService {
     this.gateway = config.pinata.gateway || 'https://gateway.pinata.cloud';
   }
 
-  async uploadJSON(data: Record<string, any>, fileName = 'data.json'): Promise<{ ipfsHash: string; url: string }> {
+  async uploadJSON(data: Record<string, any>, fileName = 'data.json', agentId = 'default'): Promise<{ ipfsHash: string; url: string }> {
     try {
       const response = await axios.post(
         'https://api.pinata.cloud/pinning/pinJSONToIPFS',
@@ -32,6 +33,17 @@ export class PinataService {
       const url = `${this.gateway}/ipfs/${IpfsHash}`;
 
       logger.info('Pinned JSON to IPFS', { IpfsHash });
+
+      await db.iPFSData.create({
+        data: {
+          hash: IpfsHash,
+          type: 'json',
+          fileName,
+          size: JSON.stringify(data).length,
+          agentId,
+        },
+      });
+
       return { ipfsHash: IpfsHash, url };
     } catch (error) {
       logger.error('Failed to upload JSON to Pinata', error);
@@ -39,7 +51,7 @@ export class PinataService {
     }
   }
 
-  async uploadFile(buffer: Buffer, fileName: string): Promise<{ ipfsHash: string; url: string }> {
+  async uploadFile(buffer: Buffer, fileName: string, agentId = 'default'): Promise<{ ipfsHash: string; url: string }> {
     try {
       const data = new FormData();
       data.append('file', buffer, { filename: fileName });
@@ -54,6 +66,17 @@ export class PinataService {
       const { IpfsHash } = response.data;
       const url = `${this.gateway}/ipfs/${IpfsHash}`;
       logger.info('Pinned file to IPFS', { IpfsHash });
+
+      await db.iPFSData.create({
+        data: {
+          hash: IpfsHash,
+          type: 'file',
+          fileName,
+          size: buffer.length,
+          agentId,
+        },
+      });
+
       return { ipfsHash: IpfsHash, url };
     } catch (error) {
       logger.error('Failed to upload file to Pinata', error);
@@ -79,7 +102,7 @@ export class PinataService {
       },
     };
 
-    return this.uploadJSON(agentStateData, `agent_state_${agentId}_${Date.now()}.json`);
+    return this.uploadJSON(agentStateData, `agent_state_${agentId}_${Date.now()}.json`, agentId);
   }
 
   /**
@@ -100,7 +123,9 @@ export class PinataService {
       },
     };
 
-    return this.uploadJSON(tradingHistoryData, `trading_history_${agentId}_${Date.now()}.json`);
+    const result = await this.uploadJSON(tradingHistoryData, `trading_history_${agentId}_${Date.now()}.json`, agentId);
+    await db.iPFSData.update({ where: { hash: result.ipfsHash }, data: { agentId, type: 'TRADING_HISTORY' }});
+    return result;
   }
 
   /**
@@ -121,7 +146,7 @@ export class PinataService {
       },
     };
 
-    return this.uploadJSON(analysisData, `ai_analysis_${agentId}_${Date.now()}.json`);
+    return this.uploadJSON(analysisData, `ai_analysis_${agentId}_${Date.now()}.json`, agentId);
   }
 
   /**
@@ -141,7 +166,9 @@ export class PinataService {
       },
     };
 
-    return this.uploadJSON(metricsData, `performance_metrics_${agentId}_${Date.now()}.json`);
+    const result = await this.uploadJSON(metricsData, `performance_metrics_${agentId}_${Date.now()}.json`, agentId);
+    await db.iPFSData.update({ where: { hash: result.ipfsHash }, data: { agentId, type: 'PERFORMANCE_METRICS' }});
+    return result;
   }
 
   /**
@@ -162,7 +189,7 @@ export class PinataService {
       },
     };
 
-    return this.uploadJSON(configData, `agent_config_${agentId}_v${config.version || '1.0'}.json`);
+    return this.uploadJSON(configData, `agent_config_${agentId}_v${config.version || '1.0'}.json`, agentId);
   }
 
   /**
@@ -182,8 +209,10 @@ export class PinataService {
         paymentProtocol: 'x402pay',
       },
     };
-
-    return this.uploadJSON(monetizationData, `monetization_${agentId}_${Date.now()}.json`);
+    
+    const result = await this.uploadJSON(monetizationData, `monetization_${agentId}_${Date.now()}.json`, agentId);
+    await db.iPFSData.update({ where: { hash: result.ipfsHash }, data: { agentId, type: 'MONETIZATION_RECORD' }});
+    return result;
   }
 
   /**
@@ -219,7 +248,9 @@ export class PinataService {
       },
     };
 
-    return this.uploadJSON(auditData, `audit_trail_${agentId}_${Date.now()}.json`);
+    const result = await this.uploadJSON(auditData, `audit_trail_${agentId}_${Date.now()}.json`, agentId);
+    await db.iPFSData.update({ where: { hash: result.ipfsHash }, data: { agentId, type: 'AUDIT_TRAIL' }});
+    return result;
   }
 
   /**
@@ -239,6 +270,8 @@ export class PinataService {
       },
     };
 
-    return this.uploadJSON(backtestData, `backtest_${agentId}_${Date.now()}.json`);
+    const result = await this.uploadJSON(backtestData, `backtest_${agentId}_${Date.now()}.json`, agentId);
+    await db.iPFSData.update({ where: { hash: result.ipfsHash }, data: { agentId, type: 'BACKTEST_RESULTS' }});
+    return result;
   }
 } 

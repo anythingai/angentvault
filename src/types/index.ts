@@ -19,13 +19,17 @@ export enum AgentStatus {
 }
 
 export interface AgentConfig {
-  riskTolerance: RiskLevel;
-  maxInvestmentAmount: number;
-  tradingPairs: string[];
-  strategies: TradingStrategy[];
-  stopLossPercentage: number;
-  takeProfitPercentage: number;
-  rebalanceFrequency: number;
+  id: string;
+  name: string;
+  userId: string;
+  strategy: any;
+  riskParameters: any;
+  maxTradeSize?: number;
+  tradingInterval?: number;
+  assets?: string[];
+  riskLevel?: 'low' | 'medium' | 'high';
+  enabled?: boolean;
+  lastExecuted?: Date;
 }
 
 export enum RiskLevel {
@@ -336,7 +340,6 @@ export interface SecurityConfig {
 }
 
 export interface FeatureConfig {
-  enableDemoMode: boolean;
   enablePaperTrading: boolean;
   enableRealTrading: boolean;
   enableWebSocket: boolean;

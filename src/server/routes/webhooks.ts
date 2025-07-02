@@ -38,7 +38,7 @@ router.post('/x402pay', expressRawBody, async (req, res) => {
         where: { id: paymentId },
         data: {
           status: status.toUpperCase(),
-          transactionHash,
+          txHash: transactionHash,
         },
       });
     }

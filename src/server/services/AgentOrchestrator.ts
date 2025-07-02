@@ -7,19 +7,19 @@ import { PinataService } from './PinataService';
 import { MarketDataService } from './MarketDataService';
 import { config } from '../config';
 import { agentTradeCounter } from '../metrics';
-import { TradeType } from '../../types';
+import { TradeType, AgentConfig, Trade } from '../../types';
+import { WebSocketHandler } from '../websocket/handler';
 
-export interface AgentConfig {
+interface Agent {
   id: string;
-  userId: string;
-  name: string;
-  strategy: string;
-  riskLevel: 'low' | 'medium' | 'high';
-  maxTradeSize: number;
-  enabled: boolean;
-  assets: string[];
-  tradingInterval: number; // in milliseconds
-  lastExecuted?: Date;
+  config: AgentConfig;
+  trades: Trade[];
+  performance: {
+    totalReturn: number;
+    winRate: number;
+    totalTrades: number;
+    profitableTrades: number;
+  };
 }
 
 export interface TradeDecision {
@@ -47,15 +47,20 @@ export class AgentOrchestrator {
   private paymentService: X402PayService;
   private pinataService: PinataService;
   private marketDataService: MarketDataService;
+  private websocketHandler: WebSocketHandler;
   private activeAgents: Map<string, AgentConfig> = new Map();
   private executionTimers: Map<string, NodeJS.Timeout> = new Map();
+  private agents: Map<string, Agent> = new Map();
+  private isRunning: boolean = false;
+  private monitoringInterval: NodeJS.Timeout | null = null;
 
-  constructor() {
+  constructor(websocketHandler: WebSocketHandler) {
     this.bedrockService = new BedrockService();
     this.walletService = new CDPWalletService();
     this.paymentService = new X402PayService();
     this.pinataService = new PinataService();
     this.marketDataService = new MarketDataService();
+    this.websocketHandler = websocketHandler;
 
     logger.info('AgentOrchestrator initialized');
   }
@@ -93,7 +98,7 @@ export class AgentOrchestrator {
   private async loadActiveAgents(): Promise<void> {
     try {
       const activeAgents = await db.agent.findMany({
-        where: { status: 'ACTIVE' }
+        where: { status: 'active' }
       });
 
       for (const agent of activeAgents) {
@@ -110,7 +115,7 @@ export class AgentOrchestrator {
     try {
       const agent = await db.agent.findUnique({
         where: { id: agentId },
-        include: { owner: true }
+        include: { user: true }
       });
 
       if (!agent) {
@@ -120,7 +125,7 @@ export class AgentOrchestrator {
       // Enable autonomous payments for the agent
       await this.paymentService.enableAutonomousPayments(
         agentId,
-        agent.walletAddress || 'default-wallet'
+        agent.user.walletAddress || 'default-wallet'
       );
 
       // Start agent execution loop
@@ -133,13 +138,15 @@ export class AgentOrchestrator {
       // Update agent status
       await db.agent.update({
         where: { id: agentId },
-        data: { status: 'ACTIVE' }
+        data: { status: 'active' }
       });
 
-      // Store agent configuration on IPFS
-      await this.pinataService.storeAgentConfig(agentId, agent.config);
+      this.websocketHandler.broadcastAgentUpdate(agentId, { status: 'active' });
 
-      logger.info('Agent started', { agentId, ownerId: agent.ownerId });
+      // Store agent configuration on IPFS
+      await this.pinataService.storeAgentConfig(agentId, agent.strategy);
+
+      logger.info('Agent started', { agentId, userId: agent.userId });
     } catch (error) {
       logger.error('Failed to start agent:', error);
       throw error;
@@ -156,8 +163,13 @@ export class AgentOrchestrator {
 
       await db.agent.update({
         where: { id: agentId },
-        data: { status: 'PAUSED' }
+        data: { status: 'paused' }
       });
+
+      const agent = await db.agent.findUnique({ where: { id: agentId } });
+      if(agent) {
+        this.websocketHandler.broadcastAgentUpdate(agentId, { status: 'paused' });
+      }
 
       logger.info('Agent stopped', { agentId });
     } catch (error) {
@@ -171,7 +183,7 @@ export class AgentOrchestrator {
       logger.info('Executing agent cycle', { agentId: agent.id });
 
       // Get market data
-      const marketData = await this.getMarketData(agent.config.tradingPairs || ['BTC/USD', 'ETH/USD']);
+      const marketData = await this.getMarketData(agent.strategy.tradingPairs || ['BTC/USD', 'ETH/USD']);
 
       // Perform comprehensive market analysis using Bedrock
       const analysis = await this.performComprehensiveAnalysis(agent, marketData);
@@ -181,15 +193,15 @@ export class AgentOrchestrator {
 
       if (decision.shouldTrade) {
         // Check if user has sufficient balance
-        const balances = await this.walletService.getBalance(agent.ownerId);
+        const balances = await this.walletService.getBalance(agent.userId);
         const hasSufficientBalance = this.checkSufficientBalance(balances, decision);
         
         if (hasSufficientBalance) {
         // Execute trade via CDP Wallet
-        await this.executeTrade(agent, decision);
+        const tradeResult = await this.executeTrade(agent, decision);
           
-          // Record successful trade
-          await this.recordTradeExecution(agent, decision, analysis);
+          // Record successful trade with actual transaction result
+          await this.recordTradeExecution(agent, decision, analysis, tradeResult);
         } else {
           logger.warn('Insufficient balance for trade', { agentId: agent.id, decision });
         }
@@ -218,8 +230,10 @@ export class AgentOrchestrator {
       // Update agent status to error
       await db.agent.update({
         where: { id: agent.id },
-        data: { status: 'ERROR' }
+        data: { status: 'paused' }
       });
+      
+      this.websocketHandler.broadcastAgentUpdate(agent.id, { status: 'paused' });
       
       // Create error audit trail
       await this.pinataService.createAuditTrail(agent.id, [{
@@ -231,14 +245,14 @@ export class AgentOrchestrator {
   }
 
   private async performComprehensiveAnalysis(agent: any, marketData: any): Promise<any> {
-    const symbol = agent.config.primarySymbol || 'BTC';
+    const symbol = agent.strategy.primarySymbol || 'BTC';
     
     // Perform multiple types of analysis
     const [sentiment, prediction, risk, opportunities] = await Promise.all([
       this.bedrockService.analyzeMarketSentiment(marketData),
       this.bedrockService.predictPrice(symbol, this.formatHistoricalData(marketData), '1H'),
       this.bedrockService.assessRisk(agent.portfolio || {}, marketData),
-      this.bedrockService.detectOpportunities([marketData], agent.config.strategies || ['momentum'])
+      this.bedrockService.detectOpportunities([marketData], agent.strategy.strategies || ['momentum'])
     ]);
 
     return {
@@ -252,13 +266,13 @@ export class AgentOrchestrator {
 
   private async makeInformedTradeDecision(agent: any, analysis: any, marketData: any): Promise<any> {
     // Use Bedrock to generate a trading decision
-    const symbol = agent.config.primarySymbol || 'BTC';
+    const symbol = agent.strategy.primarySymbol || 'BTC';
     const decision = await this.bedrockService.generateAgentDecision(symbol);
     
     // Validate decision against risk parameters
     const riskScore = analysis.risk?.risk_score || 5;
     const confidence = decision.confidence || 0.5;
-    const maxRisk = agent.config.maxRiskScore || 7;
+    const maxRisk = agent.riskParameters.maxRiskScore || 7;
     
     const shouldTrade = confidence > 0.7 && riskScore < maxRisk;
     
@@ -275,8 +289,8 @@ export class AgentOrchestrator {
   }
 
   private calculatePositionSize(agent: any, analysis: any, _marketData: any): number {
-    const baseAmount = agent.config.baseTradeAmount || 100;
-    const maxPosition = agent.config.maxPositionSize || 1000;
+    const baseAmount = agent.riskParameters.baseTradeAmount || 100;
+    const maxPosition = agent.riskParameters.maxPositionSize || 1000;
     const riskMultiplier = 1 - (analysis.risk?.risk_score || 5) / 10;
     
     return Math.min(baseAmount * riskMultiplier, maxPosition);
@@ -288,31 +302,40 @@ export class AgentOrchestrator {
     return balance && balance.balance >= decision.amount;
   }
 
-  private async recordTradeExecution(agent: any, decision: any, _analysis: any): Promise<void> {
+  private async recordTradeExecution(agent: any, decision: any, _analysis: any, tradeResult?: any): Promise<void> {
     // Create trade record
     const trade = await db.trade.create({
       data: {
         agentId: agent.id,
+        userId: agent.userId,
+        walletId: agent.walletId || '',
         type: decision.action.toUpperCase(),
-        symbol: decision.symbol,
+        fromAsset: decision.symbol.split('/')[0],
+        toAsset: decision.symbol.split('/')[1] || 'USD',
         amount: decision.amount,
         price: decision.price,
-        status: 'EXECUTED',
-        confidence: decision.confidence,
-        metadata: JSON.stringify({
+        usdValue: decision.amount * decision.price,
+        status: tradeResult?.success ? 'success' : 'pending',
+        txHash: tradeResult?.transactionHash || `pending-${Date.now()}`,
+        metadata: {
           riskScore: decision.riskScore,
           reasoning: decision.reasoning
-        }) as any
+        } as any
       }
+    });
+
+    this.websocketHandler.broadcastTradeExecution(agent.userId, {
+      ...decision,
+      ...trade,
     });
 
     // Store trade on IPFS
     await this.pinataService.storeTradingHistory(agent.id, [trade]);
 
     // Create payment record for monetization
-    if (agent.config.chargePerTrade) {
+    if (agent.strategy.chargePerTrade) {
       await this.paymentService.processAgentQuery(
-        agent.ownerId,
+        agent.userId,
         agent.id,
         'trade_execution'
       );
@@ -334,16 +357,18 @@ export class AgentOrchestrator {
 
   private async updateAgentState(agentId: string, state: any): Promise<void> {
     // Update agent in database
-    await db.agent.update({
+    const agent = await db.agent.update({
       where: { id: agentId },
       data: {
         lastExecutionTime: state.lastExecutionTime,
-        metadata: JSON.stringify({
+        performance: {
           ...state,
           updatedAt: new Date()
-        }) as any
+        } as any
       }
     });
+
+    this.websocketHandler.broadcastAgentUpdate(agentId, { performance: agent.performance });
 
     // Store state on IPFS
     await this.pinataService.storeAgentState(agentId, state);
@@ -367,20 +392,8 @@ export class AgentOrchestrator {
       });
       return formatted;
     } catch (error) {
-      logger.error('Failed to fetch live market data, using mock:', error);
-      // Fallback to mock data
-      const mockData: any = {};
-      for (const pair of tradingPairs) {
-        mockData[pair] = {
-          price: pair.includes('BTC') ? 45000 : pair.includes('ETH') ? 3000 : 100,
-          volume: 1000000,
-          change24h: Math.random() * 10 - 5,
-          changePercentage24h: Math.random() * 10 - 5,
-          marketCap: 1000000000,
-          lastUpdated: new Date()
-        };
-      }
-      return mockData;
+      logger.error('Failed to fetch market data:', error);
+      throw new Error(`Market data service unavailable: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -397,10 +410,8 @@ export class AgentOrchestrator {
     }));
   }
 
-  private async executeTrade(agent: any, decision: any): Promise<void> {
+  private async executeTrade(agent: any, decision: any): Promise<any> {
     try {
-      const [baseAsset, quoteAsset] = decision.symbol.split('/');
-
       logger.info('Executing trade', {
         agentId: agent.id,
         action: decision.action,
@@ -410,9 +421,9 @@ export class AgentOrchestrator {
 
       if (config.features?.enableRealTrading) {
         const result = await this.walletService.executeTrade(
-          agent.ownerId,
-          decision.action === 'buy' ? quoteAsset : baseAsset,
-          decision.action === 'buy' ? baseAsset : quoteAsset,
+          agent.userId,
+          decision.side === 'BUY' ? decision.symbol.split('/')[1] : decision.symbol.split('/')[0],
+          decision.side === 'BUY' ? decision.symbol.split('/')[0] : decision.symbol.split('/')[1],
           decision.amount,
           decision.action.toUpperCase()
         );
@@ -421,12 +432,28 @@ export class AgentOrchestrator {
           agentId: agent.id,
           transactionHash: result.transactionHash 
         });
+
+        this.websocketHandler.broadcastTradeExecution(agent.userId, {
+          ...decision,
+          ...result,
+        });
+        
+        return result;
       } else {
-        logger.info('Trade simulated (real trading disabled)', { agentId: agent.id });
+        logger.warn('Real trading is disabled - trade not executed', { agentId: agent.id });
+        return {
+          success: false,
+          error: 'Real trading is disabled',
+          transactionHash: null
+        };
       }
     } catch (error) {
       logger.error('Trade execution failed:', error);
-      throw error;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        transactionHash: null
+      };
     }
   }
 
@@ -475,7 +502,7 @@ export class AgentOrchestrator {
       logger.info('Executing agent decision', { agentId });
 
       // Get market data for analysis
-      const marketData = await this.marketDataService.getMarketData(agent.assets);
+      const marketData = await this.marketDataService.getMarketData(agent.assets || []);
       
       // Get AI decision from Bedrock
       const decision = await this.generateTradingDecision(agent, marketData);
@@ -486,6 +513,13 @@ export class AgentOrchestrator {
 
       // Execute trade if confidence is high enough
       const execution = await this.executeTradeForAgent(agent, decision);
+      
+      if (execution.success) {
+        this.websocketHandler.broadcastTradeExecution(agent.userId, {
+          ...decision,
+          ...execution,
+        });
+      }
 
       // Store execution results on Pinata
       const tradeRecord = {
@@ -514,6 +548,8 @@ export class AgentOrchestrator {
         success: execution.success,
         ipfsHash: pinataResult.ipfsHash
       });
+
+      this.websocketHandler.broadcastAgentUpdate(agentId, { lastExecuted: agent.lastExecuted });
 
       return result;
     } catch (error) {
@@ -548,8 +584,8 @@ export class AgentOrchestrator {
           );
           break;
         default:
-          // Use simple decision for demo
-          analysisResult = await this.bedrockService.generateAgentDecision(agent.assets[0]);
+          // Default strategy: basic AI decision analysis
+          analysisResult = await this.bedrockService.generateAgentDecision(agent.assets?.[0] || 'BTC/USD');
       }
 
       if (!analysisResult || !analysisResult.content) {
@@ -562,8 +598,8 @@ export class AgentOrchestrator {
       if (analysisResult.content[0]?.type === 'tool_use') {
         const toolResult = analysisResult.content[0].input;
         decision = {
-          symbol: toolResult.symbol || agent.assets[0],
-          side: toolResult.side || toolResult.action?.toUpperCase() || 'HOLD',
+          symbol: toolResult.symbol || agent.assets?.[0] || 'BTC/USD',
+          side: toolResult.side || toolResult.action?.toLowerCase() || 'hold',
           confidence: toolResult.confidence || 0.5,
           reasoning: toolResult.reasoning || 'AI-generated decision',
           timestamp: new Date(),
@@ -574,8 +610,8 @@ export class AgentOrchestrator {
           const textContent = analysisResult.content[0]?.text || '{}';
           const parsed = JSON.parse(textContent);
           decision = {
-            symbol: parsed.symbol || agent.assets[0],
-            side: parsed.side || 'HOLD',
+            symbol: parsed.symbol || agent.assets?.[0] || 'BTC/USD',
+            side: parsed.side || 'hold',
             confidence: parsed.confidence || 0.5,
             reasoning: parsed.reasoning || 'AI-generated decision',
             timestamp: new Date(),
@@ -621,14 +657,10 @@ export class AgentOrchestrator {
 
       const tradeType = decision.side === 'BUY' ? TradeType.BUY : TradeType.SELL;
       
-      // For demo purposes, we'll simulate with USDC as base currency
-      const fromAsset = decision.side === 'BUY' ? 'USDC' : decision.symbol;
-      const toAsset = decision.side === 'BUY' ? decision.symbol : 'USDC';
-
       const result = await this.walletService.executeTrade(
         agent.userId,
-        fromAsset,
-        toAsset,
+        decision.side === 'BUY' ? decision.symbol.split('/')[1] : decision.symbol.split('/')[0],
+        decision.side === 'BUY' ? decision.symbol.split('/')[0] : decision.symbol.split('/')[1],
         decision.amount,
         tradeType
       );
@@ -641,7 +673,7 @@ export class AgentOrchestrator {
       // Default successful result if CDP service doesn't return proper format
       return { 
         success: true, 
-        transactionHash: result?.transactionHash || 'demo-tx',
+        transactionHash: result?.transactionHash || `tx-${Date.now()}`,
         amount: decision.amount,
         symbol: decision.symbol,
         side: decision.side
@@ -668,9 +700,10 @@ export class AgentOrchestrator {
                           agent.riskLevel === 'medium' ? 0.2 : 0.3;
     
     const confidenceAdjustment = decision.confidence;
-    const baseAmount = agent.maxTradeSize * riskMultiplier * confidenceAdjustment;
+    const maxTradeSize = agent.maxTradeSize || 1000;
+    const baseAmount = maxTradeSize * riskMultiplier * confidenceAdjustment;
     
-    return Math.min(baseAmount, agent.maxTradeSize);
+    return Math.min(baseAmount, maxTradeSize);
   }
 
   /**
@@ -726,6 +759,8 @@ export class AgentOrchestrator {
 
       // Store metrics on Pinata
       await this.pinataService.storePerformanceMetrics(agentId, metrics);
+      
+      this.websocketHandler.broadcastAgentUpdate(agentId, { performance: metrics });
 
       return metrics;
     } catch (error) {
@@ -764,7 +799,7 @@ export class AgentOrchestrator {
       throw new Error('Missing required agent configuration fields');
     }
     
-    if (config.maxTradeSize <= 0) {
+    if ((config.maxTradeSize || 0) <= 0) {
       throw new Error('Max trade size must be positive');
     }
     
@@ -772,7 +807,7 @@ export class AgentOrchestrator {
       throw new Error('At least one asset must be specified');
     }
     
-    if (config.tradingInterval < 60000) { // Minimum 1 minute
+    if ((config.tradingInterval || 0) < 60000) { // Minimum 1 minute
       throw new Error('Trading interval must be at least 1 minute');
     }
   }
@@ -782,5 +817,40 @@ export class AgentOrchestrator {
    */
   getActiveAgents(): AgentConfig[] {
     return Array.from(this.activeAgents.values());
+  }
+
+  async registerAgent(agentId: string, config: AgentConfig): Promise<void> {
+    const agent: Agent = {
+      id: agentId,
+      config,
+      trades: [],
+      performance: {
+        totalReturn: 0,
+        winRate: 0,
+        totalTrades: 0,
+        profitableTrades: 0,
+      },
+    };
+
+    this.agents.set(agentId, agent);
+    logger.info('Agent registered', { agentId, config });
+  }
+
+  async updateAgent(agentId: string, config: Partial<AgentConfig>): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not found`);
+    }
+
+    agent.config = { ...agent.config, ...config };
+    logger.info('Agent updated', { agentId, config });
+  }
+
+  public broadcastAgentUpdate(agentId: string, data: any) {
+    this.websocketHandler.broadcastAgentUpdate(agentId, data);
+  }
+
+  public broadcastTradeExecution(userId: string, trade: any) {
+    this.websocketHandler.broadcastTradeExecution(userId, trade);
   }
 } 

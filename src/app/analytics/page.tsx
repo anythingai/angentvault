@@ -25,27 +25,43 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, [timeRange]);
+  }, [timeRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAnalyticsData = async () => {
     setIsLoading(true);
     try {
-      // Mock data - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const mockData: AnalyticsData = {
-        totalTrades: 1247,
-        winRate: 73.2,
-        avgReturn: 12.8,
-        bestStrategy: 'DeFi Yield Farming',
-        totalVolume: 485230,
-        activeAgents: 5
-      };
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
 
-      setAnalytics(mockData);
+      const response = await fetch(`/api/analytics?timeRange=${timeRange}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch analytics');
+      }
+
+      const result = await response.json();
+      if (result.success && result.data) {
+        setAnalytics(result.data);
+      } else {
+        throw new Error(result.error || 'Invalid response');
+      }
     } catch (error) {
-      // Handle error - could implement toast notification or error state
-      // console.error('Failed to fetch analytics data:', error);
+      // Handle error silently in production
+      // Set empty state
+      setAnalytics({
+        totalTrades: 0,
+        winRate: 0,
+        avgReturn: 0,
+        bestStrategy: 'No data',
+        totalVolume: 0,
+        activeAgents: 0
+      });
     } finally {
       setIsLoading(false);
     }

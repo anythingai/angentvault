@@ -1,64 +1,215 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { db } from '../database';
-import { config } from '../config';
+import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 import { redis } from '../redis';
-import { randomBytes } from 'crypto';
+import { config } from '../config';
+import { CDPWalletService } from '../services/CDPWalletService';
 
 const router = Router();
+const prisma = new PrismaClient();
+const cdpWalletService = new CDPWalletService();
 
-// Lazy load CDP SDK to avoid build issues if module missing in dev
-let CdpClient: any;
 try {
-  const cdpSdk = require('@coinbase/cdp-sdk');
-  CdpClient = cdpSdk.CdpClient;
-} catch (err) {
-  // ignore, will run in demo mode
+  require('@coinbase/coinbase-sdk');
+} catch (e) {
+  logger.error('CDP SDK not available - authentication requires CDP integration');
+  throw new Error('CDP SDK is required for production authentication');
 }
 
-// Demo login for hackathon
-router.post('/login', async (req, res) => {
+// Register endpoint
+router.post('/register', async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { email, password, name } = req.body;
 
-    // If MFA is enabled, verify OTP first
-    if (process.env.ENABLE_MFA === 'true') {
-      if (!otp) {
-        return res.status(401).json({ success: false, error: 'OTP_REQUIRED', message: 'OTP code required' });
-      }
-      const validOtp = await verifyOtp(email, otp);
-      if (!validOtp) {
-        return res.status(401).json({ success: false, error: 'OTP_INVALID', message: 'Invalid or expired OTP' });
-      }
+    if (!email || !password || !name) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: email, password, name' 
+      });
     }
 
-    // For demo purposes, create a demo user if it doesn't exist
-    let user = await db.user.findUnique({
-      where: { email: email || 'demo@agentvault.com' },
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        error: 'Invalid email format' 
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters long' 
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
     });
 
-    if (!user) {
-      // Create demo user
-      user = await db.user.create({
+    if (existingUser) {
+      return res.status(409).json({ 
+        error: 'User already exists with this email' 
+      });
+    }
+
+    // Hash password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Create CDP wallet for the user
+    let walletAddress = '';
+    let tempUser: any = null;
+    try {
+      // Create user first to get userId
+      tempUser = await prisma.user.create({
         data: {
-          email: email || 'demo@agentvault.com',
-          name: 'Demo User',
-          walletAddress: '0xdemo1234567890abcdef',
-          isVerified: true,
-          subscription: 'FREE',
+          email,
+          passwordHash: hashedPassword,
+          name,
+          subscription: 'basic',
         },
       });
 
-      logger.info('Demo user created:', { userId: user.id });
+      // Create CDP wallet
+      const wallet = await cdpWalletService.createWallet(tempUser.id);
+      walletAddress = wallet.addresses?.[0]?.id || wallet.id;
+
+      // Update user with wallet address
+      const user = await prisma.user.update({
+        where: { id: tempUser.id },
+        data: { walletAddress },
+      });
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { 
+          userId: user.id, 
+          email: user.email,
+          walletAddress: user.walletAddress 
+        },
+        config.security.jwtSecret,
+        { expiresIn: '7d' }
+      );
+
+      logger.info('User registered successfully', { 
+        userId: user.id, 
+        email: user.email,
+        walletAddress: user.walletAddress 
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'User registered successfully',
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            walletAddress: user.walletAddress,
+            subscription: user.subscription,
+          },
+          token,
+          walletAddress: user.walletAddress,
+        },
+      });
+    } catch (walletError) {
+      // Clean up user if wallet creation failed
+      if (tempUser) {
+        await prisma.user.delete({ where: { id: tempUser.id } });
+      }
+      throw walletError;
+    }
+  } catch (error) {
+    logger.error('Registration failed:', error);
+    res.status(500).json({
+      error: 'Registration failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Login endpoint
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ 
+        error: 'Email and password are required' 
+      });
+    }
+
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        wallets: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({ 
+        error: 'Invalid email or password' 
+      });
+    }
+
+    // For users created before password implementation, require password reset
+    if (!user.passwordHash) {
+      return res.status(403).json({
+        error: 'Password not set. Please use password reset to set your password.',
+        requiresPasswordReset: true,
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ 
+        error: 'Invalid email or password' 
+      });
+    }
+
+    // Ensure user has a wallet
+    if (!user.walletAddress && user.wallets.length === 0) {
+      try {
+        const wallet = await cdpWalletService.getOrCreateWallet(user.id);
+        const walletAddress = wallet.addresses?.[0]?.id || wallet.id;
+        
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { walletAddress },
+        });
+        
+        user.walletAddress = walletAddress;
+      } catch (walletError) {
+        logger.error('Failed to create wallet for existing user:', walletError);
+        return res.status(500).json({
+          error: 'Failed to initialize user wallet',
+        });
+      }
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { 
+        userId: user.id, 
+        email: user.email,
+        walletAddress: user.walletAddress 
+      },
       config.security.jwtSecret,
-      { expiresIn: '24h' }
+      { expiresIn: '7d' }
     );
+
+    // Store login session in Redis
+    await redis.set(`auth:${user.id}`, token, 7 * 24 * 60 * 60); // 7 days
+
+    logger.info('User logged in successfully', { 
+      userId: user.id, 
+      email: user.email 
+    });
 
     res.json({
       success: true,
@@ -74,250 +225,213 @@ router.post('/login', async (req, res) => {
         token,
       },
     });
-
-    logger.info('User logged in:', { userId: user.id, email: user.email });
   } catch (error) {
     logger.error('Login failed:', error);
     res.status(500).json({
-      success: false,
       error: 'Login failed',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
-// Register endpoint (for demo)
-router.post('/register', async (req, res) => {
+// Logout endpoint
+router.post('/logout', async (req, res) => {
   try {
-    const { email, name } = req.body;
-
-    if (!email || !name) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields',
-        message: 'Email and name are required',
-      });
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(400).json({ error: 'No token provided' });
     }
 
-    // Check if user already exists
-    const existingUser = await db.user.findUnique({
-      where: { email },
-    });
+    const decoded = jwt.verify(token, config.security.jwtSecret) as any;
+    
+    // Remove from Redis
+    await redis.del(`auth:${decoded.userId}`);
 
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        error: 'User already exists',
-        message: 'A user with this email already exists',
-      });
-    }
-
-    // Create new user
-    const user = await db.user.create({
-      data: {
-        email,
-        name,
-        walletAddress: `0x${Date.now().toString(16)}${Math.random().toString(16).substr(2, 8)}`,
-        isVerified: false,
-        subscription: 'FREE',
-      },
-    });
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      config.security.jwtSecret,
-      { expiresIn: '24h' }
-    );
-
-    res.status(201).json({
+    res.json({
       success: true,
-      message: 'Registration successful',
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          walletAddress: user.walletAddress,
-          subscription: user.subscription,
-        },
-        token,
-      },
+      message: 'Logged out successfully',
     });
-
-    logger.info('User registered:', { userId: user.id, email: user.email });
   } catch (error) {
-    logger.error('Registration failed:', error);
+    logger.error('Logout failed:', error);
     res.status(500).json({
-      success: false,
-      error: 'Registration failed',
+      error: 'Logout failed',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
-// Logout endpoint (mainly for cleanup)
-router.post('/logout', (req, res) => {
-  // In a real app, you might invalidate the token in a blacklist
-  res.json({
-    success: true,
-    message: 'Logout successful',
-  });
-});
-
-// Token verification endpoint
-router.get('/verify', async (req, res) => {
+// Password reset request
+router.post('/forgot-password', async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const { email } = req.body;
 
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: 'No token provided',
-        message: 'Authorization token is required',
-      });
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
     }
 
-    const decoded = jwt.verify(token, config.security.jwtSecret) as any;
-    const user = await db.user.findUnique({
-      where: { id: decoded.userId },
+    const user = await prisma.user.findUnique({
+      where: { email },
     });
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid token',
-        message: 'User not found',
+      // Don't reveal if email exists or not for security
+      return res.json({ 
+        success: true, 
+        message: 'If an account exists, password reset instructions will be sent' 
       });
+    }
+
+    // Generate reset token
+    const resetToken = jwt.sign(
+      { userId: user.id, type: 'password_reset' },
+      config.security.jwtSecret,
+      { expiresIn: '1h' }
+    );
+
+    // Store reset token in Redis with 1-hour expiry
+    await redis.set(`reset:${user.id}`, resetToken, 3600);
+
+    // In production, send email with reset link
+    // For now, log the reset token
+    logger.info('Password reset requested', { 
+      userId: user.id, 
+      email: user.email,
+      resetToken 
+    });
+
+    const response: any = { 
+      success: true, 
+      message: 'Password reset instructions sent to email'
+    };
+    
+    // Only include reset token in non-production environments for testing
+    if (process.env.NODE_ENV !== 'production') {
+      response.resetToken = resetToken;
+    }
+    
+    res.json(response);
+  } catch (error) {
+    logger.error('Password reset request failed:', error);
+    res.status(500).json({
+      error: 'Password reset failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Reset password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ 
+        error: 'Token and new password are required' 
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters long' 
+      });
+    }
+
+    // Verify reset token
+    const decoded = jwt.verify(token, config.security.jwtSecret) as any;
+    
+    if (decoded.type !== 'password_reset') {
+      return res.status(400).json({ error: 'Invalid reset token' });
+    }
+
+    // Check if token exists in Redis
+    const storedToken = await redis.get(`reset:${decoded.userId}`);
+    if (!storedToken || storedToken !== token) {
+      return res.status(400).json({ 
+        error: 'Reset token expired or invalid' 
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Update user password
+    await prisma.user.update({
+      where: { id: decoded.userId },
+      data: { passwordHash: hashedPassword },
+    });
+
+    // Remove reset token from Redis
+    await redis.del(`reset:${decoded.userId}`);
+
+    logger.info('Password reset successful', { userId: decoded.userId });
+
+    res.json({
+      success: true,
+      message: 'Password reset successful',
+    });
+  } catch (error) {
+    logger.error('Password reset failed:', error);
+    
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    res.status(500).json({
+      error: 'Password reset failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Verify token endpoint
+router.get('/verify', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, config.security.jwtSecret) as any;
+    
+    // Check if session exists in Redis
+    const storedToken = await redis.get(`auth:${decoded.userId}`);
+    if (!storedToken) {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+
+    // Get user data
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        walletAddress: true,
+        subscription: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
     }
 
     res.json({
       success: true,
-      message: 'Token is valid',
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          walletAddress: user.walletAddress,
-          subscription: user.subscription,
-        },
-      },
+      data: { user },
     });
   } catch (error) {
     logger.error('Token verification failed:', error);
-    res.status(401).json({
-      success: false,
-      error: 'Invalid token',
-      message: error instanceof Error ? error.message : 'Token verification failed',
+    
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    res.status(500).json({
+      error: 'Token verification failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
-  }
-});
-
-// -------------------- MFA OTP Support --------------------
-// Request OTP endpoint (generates 6-digit code and stores in Redis/memory for 5 min)
-router.post('/request-otp', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, error: 'Email required' });
-    }
-
-    // Generate 6-digit numeric code
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Store in redis / fallback cache with 5-minute TTL
-    await redis.set(`otp:${email}`, otp, 300);
-
-    // NOTE: In production you would e-mail or SMS the OTP
-    logger.info('OTP generated for user', { email, otp });
-
-    return res.json({ success: true, message: 'OTP sent (mock)', data: { email } });
-  } catch (err) {
-    logger.error('OTP generation error', err);
-    return res.status(500).json({ success: false, error: 'OTP generation failed' });
-  }
-});
-
-// Helper to verify OTP (used in /login when MFA enabled)
-async function verifyOtp(email: string, code: string): Promise<boolean> {
-  const stored = await redis.get(`otp:${email}`);
-  return stored === code;
-}
-
-// ---------------------------------------------------------
-
-// -------------------- Wallet Sign-In (EOA) --------------------
-// Step 1: Get nonce to sign
-router.get('/nonce/:address', async (req, res) => {
-  try {
-    const { address } = req.params;
-    if (!address) {
-      return res.status(400).json({ success: false, error: 'Address required' });
-    }
-    const nonce = 'Login to AgentVault: ' + randomBytes(8).toString('hex');
-    await redis.set(`nonce:${address.toLowerCase()}`, nonce, 300);
-    return res.json({ success: true, data: { nonce } });
-  } catch (err) {
-    logger.error('Nonce generation error', err);
-    return res.status(500).json({ success: false, error: 'Nonce generation failed' });
-  }
-});
-
-// Step 2: Verify signature and create CDP account if needed
-router.post('/verify-signature', async (req, res) => {
-  try {
-    const { address, signature } = req.body;
-    if (!address || !signature) {
-      return res.status(400).json({ success: false, error: 'Missing params' });
-    }
-    const nonce = await redis.get(`nonce:${address.toLowerCase()}`);
-    if (!nonce) {
-      return res.status(400).json({ success: false, error: 'Nonce expired' });
-    }
-
-    // Verify signature using ethers
-    const { verifyMessage } = await import('ethers');
-    const signer = verifyMessage(nonce, signature);
-    if (signer.toLowerCase() !== address.toLowerCase()) {
-      return res.status(401).json({ success: false, error: 'Signature invalid' });
-    }
-
-    // Upsert user & wallet
-    let user = await db.user.findFirst({ where: { walletAddress: address.toLowerCase() } });
-    if (!user) {
-      user = await db.user.create({
-        data: {
-          email: `${address.toLowerCase()}@eoa`,
-          name: 'EOA User',
-          walletAddress: address.toLowerCase(),
-          isVerified: true,
-        },
-      });
-    }
-
-    let wallet = await db.wallet.findUnique({ where: { address: address.toLowerCase() } });
-    if (!wallet) {
-      // Create CDP account
-      const cdpClient = new CdpClient({ apiKeyId: config.cdp.apiKeyId, apiKeySecret: config.cdp.apiKeySecret, walletSecret: process.env.CDP_WALLET_SECRET });
-      const cdpRes = await cdpClient.wallets.createAccount({ network: 'base' });
-      wallet = await db.wallet.create({
-        data: {
-          address: address.toLowerCase(),
-          userId: user.id,
-          balance: '0',
-          cdpAccountId: cdpRes.accountId,
-        } as any,
-      });
-    }
-
-    // Generate JWT for session
-    const token = jwt.sign({ userId: user.id, wallet: address.toLowerCase() }, config.security.jwtSecret, { expiresIn: '24h' });
-
-    return res.json({ success: true, data: { token } });
-  } catch (err) {
-    logger.error('Signature verify error', err);
-    return res.status(500).json({ success: false, error: 'Verify failed' });
   }
 });
 

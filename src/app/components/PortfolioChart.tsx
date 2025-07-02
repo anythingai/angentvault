@@ -45,112 +45,120 @@ export default function PortfolioChart() {
 
   const fetchPortfolioData = async () => {
     try {
-      // Mock API call - replace with actual GraphQL query
-      const mockData: PortfolioData = {
-        timestamp: new Date().toISOString(),
-        totalValue: 25000 + Math.random() * 1000 - 500, // Simulate market fluctuation
-        totalPnL: 2100 + Math.random() * 200 - 100,
-        pnlPercentage: 9.2 + Math.random() * 2 - 1,
-        assets: [
-          {
-            symbol: 'BTC',
-            amount: 0.25,
-            value: 11250 + Math.random() * 500 - 250,
-            change24h: 4.65 + Math.random() * 2 - 1
-          },
-          {
-            symbol: 'ETH',
-            amount: 2.5,
-            value: 7500 + Math.random() * 300 - 150,
-            change24h: 5.26 + Math.random() * 2 - 1
-          },
-          {
-            symbol: 'USDC',
-            amount: 6250,
-            value: 6250,
-            change24h: 0.01
-          }
-        ]
-      };
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await fetch('/api/portfolio', {
+        headers: { 
+          Authorization: `Bearer ${token}` 
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch portfolio data');
+      }
+
+      const data = await response.json();
       
-      setPortfolioData(mockData);
+      // Transform API response to component format
+      if (data.portfolio && data.portfolio.length > 0) {
+        const totalValue = data.portfolio.reduce((sum: number, asset: any) => sum + asset.balanceUSD, 0);
+        const totalPnL = data.portfolio.reduce((sum: number, asset: any) => sum + (asset.profitLoss || 0), 0);
+        const pnlPercentage = totalValue > 0 ? (totalPnL / (totalValue - totalPnL)) * 100 : 0;
+
+        const portfolioData: PortfolioData = {
+          timestamp: new Date().toISOString(),
+          totalValue,
+          totalPnL,
+          pnlPercentage,
+          assets: data.portfolio.map((asset: any) => ({
+            symbol: asset.asset,
+            amount: asset.balance,
+            value: asset.balanceUSD,
+            change24h: ((asset.profitLoss || 0) / asset.balanceUSD) * 100
+          }))
+        };
+        
+        setPortfolioData(portfolioData);
+      }
+      
       setIsLoading(false);
     } catch (error) {
-      // eslint-disable-next-line no-console -- Replace with proper logger
+      // eslint-disable-next-line no-console
+      console.error('Failed to fetch portfolio data:', error);
       setIsLoading(false);
     }
   };
 
-  const generateChartData = () => {
-    const dataPoints: ChartDataPoint[] = [];
-    const baseValue = 22900; // Starting portfolio value
-    const now = new Date();
-    
-    const getTimePoints = () => {
-      switch (timeRange) {
-        case '1H':
-          return Array.from({ length: 60 }, (_, i) => {
-            const time = new Date(now.getTime() - (59 - i) * 60 * 1000);
-            return time;
-          });
-        case '1D':
-          return Array.from({ length: 24 }, (_, i) => {
-            const time = new Date(now.getTime() - (23 - i) * 60 * 60 * 1000);
-            return time;
-          });
-        case '7D':
-          return Array.from({ length: 7 }, (_, i) => {
-            const time = new Date(now.getTime() - (6 - i) * 24 * 60 * 60 * 1000);
-            return time;
-          });
-        case '30D':
-          return Array.from({ length: 30 }, (_, i) => {
-            const time = new Date(now.getTime() - (29 - i) * 24 * 60 * 60 * 1000);
-            return time;
-          });
-        case '1Y':
-          return Array.from({ length: 12 }, (_, i) => {
-            const time = new Date(now.getTime() - (11 - i) * 30 * 24 * 60 * 60 * 1000);
-            return time;
-          });
-        default:
-          return [];
-      }
-    };
+  const generateChartData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
-    const timePoints = getTimePoints();
-    
-    timePoints.forEach((time, index) => {
-      // Simulate portfolio growth with some volatility
-      const growth = index * 0.02 + Math.sin(index * 0.5) * 0.01;
-      const value = baseValue * (1 + growth);
-      const pnl = value - baseValue;
-      const pnlPercentage = (pnl / baseValue) * 100;
-      
-      dataPoints.push({
-        time: timeRange === '1H' ? time.toLocaleTimeString() : time.toLocaleDateString(),
-        value: Math.round(value),
-        pnl: Math.round(pnl),
-        pnlPercentage: Math.round(pnlPercentage * 100) / 100
+      // Fetch historical data based on time range
+      const response = await fetch(`/api/portfolio/history?range=${timeRange}`, {
+        headers: { 
+          Authorization: `Bearer ${token}` 
+        },
       });
-    });
 
-    setChartData(dataPoints);
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical data');
+      }
+
+      const historyData = await response.json();
+      
+      if (historyData.history && historyData.history.length > 0) {
+        const dataPoints: ChartDataPoint[] = historyData.history.map((point: any) => ({
+          time: new Date(point.timestamp).toLocaleString(),
+          value: Math.round(point.totalValue),
+          pnl: Math.round(point.totalPnL),
+          pnlPercentage: Math.round(point.pnlPercentage * 100) / 100
+        }));
+        
+        setChartData(dataPoints);
+      } else {
+        // If no historical data, use current portfolio value as single point
+        if (portfolioData) {
+          setChartData([{
+            time: new Date().toLocaleString(),
+            value: Math.round(portfolioData.totalValue),
+            pnl: Math.round(portfolioData.totalPnL),
+            pnlPercentage: Math.round(portfolioData.pnlPercentage * 100) / 100
+          }]);
+        }
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to generate chart data:', error);
+    }
   };
 
   const updateChartData = () => {
-    if (chartData.length === 0) return;
+    if (!portfolioData) return;
     
-    // Add new data point and remove oldest if at limit
+    // Add current portfolio data as the latest point
     const newDataPoint: ChartDataPoint = {
-      time: new Date().toLocaleTimeString(),
-      value: 25000 + Math.random() * 1000 - 500,
-      pnl: 2100 + Math.random() * 200 - 100,
-      pnlPercentage: 9.2 + Math.random() * 2 - 1
+      time: new Date().toLocaleString(),
+      value: Math.round(portfolioData.totalValue),
+      pnl: Math.round(portfolioData.totalPnL),
+      pnlPercentage: Math.round(portfolioData.pnlPercentage * 100) / 100
     };
 
     setChartData(prev => {
-      const updated = [...prev.slice(1), newDataPoint];
+      if (prev.length === 0) return [newDataPoint];
+      
+      // Keep appropriate number of points based on time range
+      const maxPoints = timeRange === '1H' ? 60 : 
+                       timeRange === '1D' ? 24 : 
+                       timeRange === '7D' ? 7 * 24 : 
+                       timeRange === '30D' ? 30 : 
+                       365;
+                       
+      const updated = [...prev, newDataPoint].slice(-maxPoints);
       return updated;
     });
   };

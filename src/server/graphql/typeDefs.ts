@@ -108,7 +108,6 @@ export const typeDefs = gql`
 
   type Query {
     hello: String!
-    hackathonDemo: HackathonDemoResponse!
     testCDPConnection: CDPTestResponse!
     me: User
     agents: [Agent!]!
@@ -116,31 +115,6 @@ export const typeDefs = gql`
     marketData(symbols: [String!]!): [JSON!]!
     agentDecision(symbol: String!): AgentDecision!
     portfolio: JSON
-  }
-
-  type HackathonDemoResponse {
-    timestamp: DateTime!
-    integrations: HackathonIntegrations!
-  }
-
-  type HackathonIntegrations {
-    bedrock: IntegrationStatus!
-    cdpWallet: IntegrationStatus!
-    x402pay: IntegrationStatus!
-    pinata: IntegrationStatus!
-    marketData: IntegrationStatus!
-    summary: IntegrationSummary!
-  }
-
-  type IntegrationStatus {
-    status: String!
-    message: String!
-  }
-
-  type IntegrationSummary {
-    totalIntegrations: Int!
-    readyForDemo: Boolean!
-    message: String!
   }
 
   type CDPTestResponse {

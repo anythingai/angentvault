@@ -10,7 +10,7 @@ interface WebSocketClient {
   isAlive: boolean;
 }
 
-class WebSocketHandler {
+export class WebSocketHandler {
   private clients: Map<WebSocket, WebSocketClient> = new Map();
   private marketDataService: MarketDataService;
   private pingInterval: NodeJS.Timeout | null = null;

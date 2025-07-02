@@ -120,7 +120,9 @@ export default function AgentVaultHome() {
             <div className="text-center mb-16 animate-fade-in">
               <div className="inline-flex items-center space-x-2 bg-purple-600/20 border border-purple-500/30 rounded-full px-4 py-2 mb-6 backdrop-blur-sm">
                 <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                <span className="text-purple-300 text-sm font-medium">Built for Coinbase Agents in Action Hackathon 2024</span>
+                {process.env.NEXT_PUBLIC_ENV !== 'production' && (
+                  <span className="text-purple-300 text-sm font-medium">Built for Coinbase Agents in Action Hackathon 2024</span>
+                )}
               </div>
               
               <h1 className="text-5xl md:text-7xl font-black mb-6">
@@ -326,9 +328,6 @@ export default function AgentVaultHome() {
                   your AI agents while leveraging cutting-edge blockchain technology.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Link href="/register" className="btn-primary text-lg px-8 py-4">
-                    Get Started Free
-                  </Link>
                   <Link href="/marketplace" className="btn-ghost text-lg px-8 py-4">
                     Explore Agents
                   </Link>
@@ -344,8 +343,10 @@ export default function AgentVaultHome() {
             <div className="text-center">
               <div className="flex items-center justify-center space-x-2 mb-4">
                 <span className="text-2xl">🏆</span>
-                <span className="text-gray-400 text-sm">Built for Coinbase Agents in Action Hackathon 2024</span>
-          </div>
+                {process.env.NEXT_PUBLIC_ENV !== 'production' && (
+                  <span className="text-gray-400 text-sm">Built for Coinbase Agents in Action Hackathon 2024</span>
+                )}
+              </div>
               <p className="text-gray-500 text-sm">
             Integrating Amazon Bedrock Nova • x402pay • CDP Wallet • Akash Network • Pinata IPFS
               </p>

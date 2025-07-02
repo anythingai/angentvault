@@ -1,18 +1,21 @@
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
-// Guard-import AgentKit so code compiles even if pkg missing during CI
+// AgentKit is mandatory in production. Fail fast if it can't be resolved so the
+// container never boots half-configured.
 let CdpWalletProvider: any;
 let SwapAction: any;
 let GetBalancesAction: any;
+
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const agentkit = require('@coinbase/agentkit');
   CdpWalletProvider = agentkit.CdpWalletProvider;
-  SwapAction = agentkit.actions?.SwapAction || agentkit.SwapAction;
-  GetBalancesAction = agentkit.actions?.GetBalancesAction || agentkit.GetBalancesAction;
+  SwapAction = agentkit.actions?.SwapAction ?? agentkit.SwapAction;
+  GetBalancesAction = agentkit.actions?.GetBalancesAction ?? agentkit.GetBalancesAction;
 } catch (err) {
-  logger.warn('AgentKit not installed – falling back to demo mode', { err });
+  logger.error('❌ @coinbase/agentkit is not installed or failed to load.', { err });
+  throw new Error('AgentKit dependency missing. Install @coinbase/agentkit and its peer deps before starting the server.');
 }
 
 export interface Balance {
@@ -22,58 +25,40 @@ export interface Balance {
 }
 
 class AgentKitService {
-  private walletProvider: any | null = null;
-  private readonly demoMode: boolean;
+  private walletProvider: any;
 
   constructor() {
-    this.demoMode = !CdpWalletProvider;
+    // All required credentials are validated in ../config. If we reach this
+    // point, they are present.
+    this.walletProvider = new CdpWalletProvider({
+      apiKeyName: config.cdp.apiKeyId,
+      privateKey: config.cdp.apiKeySecret,
+      network: config.cdp.network ?? 'base-sepolia',
+    });
 
-    if (!this.demoMode) {
-      this.walletProvider = new CdpWalletProvider({
-        apiKeyName: config.cdp.apiKeyName,
-        privateKey: config.cdp.privateKey,
-        network: config.cdp.network || 'base-sepolia',
-      });
-
-      logger.info('AgentKit wallet provider initialised');
-    }
+    logger.info('✅ AgentKit wallet provider initialised');
   }
 
   /* ------------------------------------------------------------------ */
   /*                               Balance                              */
   /* ------------------------------------------------------------------ */
   async getBalances(): Promise<Balance[]> {
-    if (this.demoMode || !GetBalancesAction) {
-      return [
-        { asset: 'USDC', amount: '1000', amountUSD: 1000 },
-        { asset: 'ETH', amount: '0.5', amountUSD: 1500 },
-      ];
-    }
-
     const action = new GetBalancesAction(this.walletProvider);
-    const res = await action.run();
-    // Assuming the SDK returns { assetId: string, amount: string }[]
-    return res.map((b: any) => ({ asset: b.assetId, amount: b.amount }));
+    const sdkBalances = await action.run();
+
+    return sdkBalances.map((b: any) => ({
+      asset: b.assetId ?? b.asset ?? 'UNKNOWN',
+      amount: b.amount,
+    }));
   }
 
   /* ------------------------------------------------------------------ */
   /*                                 Swap                               */
   /* ------------------------------------------------------------------ */
-  async swap(fromAsset: string, toAsset: string, amount: string): Promise<any> {
-    if (this.demoMode || !SwapAction) {
-      // Fake tx hash for demo
-      return {
-        success: true,
-        demo: true,
-        transactionHash: '0xDEADBEEF',
-        fromAsset,
-        toAsset,
-        amount,
-      };
-    }
-
+  async swap(fromAsset: string, toAsset: string, amount: string): Promise<{ success: boolean; transactionHash: string }> {
     const action = new SwapAction(this.walletProvider);
     const tx = await action.run({ fromAsset, toAsset, amount });
+
     return {
       success: true,
       transactionHash: tx.hash ?? tx,

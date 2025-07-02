@@ -9,12 +9,13 @@ export default function PrivacyPage() {
       </div>
 
       <div className="crypto-card p-8">
-        <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-6">
-          <p className="text-blue-300 text-sm mb-0">
-            <strong>Demo Notice:</strong> This is a demonstration for the Coinbase Agents in Action Hackathon. 
-            This privacy policy is for demo purposes only.
-          </p>
-        </div>
+        {process.env.NEXT_PUBLIC_ENV !== 'production' && (
+          <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 mb-6">
+            <p className="text-blue-300 text-sm mb-0">
+              <strong>Demo Notice:</strong> DEV / TEST environment. Privacy policy draft subject to change.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-6">
           <section>

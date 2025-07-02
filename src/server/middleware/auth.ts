@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { logger } from '../utils/logger';
+import { prisma } from '../database';
 
 // Extend Express Request interface
 declare global {
@@ -15,7 +16,7 @@ declare global {
   }
 }
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
     
@@ -40,10 +41,22 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     // Verify JWT token
     const decoded = jwt.verify(token, config.security.jwtSecret) as any;
     
+    // Ensure the user referenced in the token still exists in the DB.
+    const userId = decoded.userId || decoded.id;
+    const userRecord = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!userRecord) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session',
+        message: 'Your account was not found. Please login again.',
+      });
+    }
+
     // Attach user info to request
     req.user = {
-      id: decoded.userId || decoded.id,
-      email: decoded.email,
+      id: userRecord.id,
+      email: userRecord.email ?? '',
     };
 
     next();

@@ -19,6 +19,7 @@ router.post('/', async (req: any, res) => {
     }
 
     const { amount, currency, type, recipient, metadata } = req.body;
+    const agentId = metadata?.agentId;
 
     if (!amount || !currency || !type) {
       return res.status(400).json({
@@ -32,6 +33,7 @@ router.post('/', async (req: any, res) => {
     const payment = await db.payment.create({
       data: {
         userId,
+        agentId,
         amount: parseFloat(amount),
         currency,
         type,
@@ -52,10 +54,10 @@ router.post('/', async (req: any, res) => {
       },
     });
 
-    // Update payment with x402pay ID
+    // Update payment with x402pay reference
     const updatedPayment = await db.payment.update({
       where: { id: payment.id },
-      data: { x402payId: paymentRequest.id },
+      data: { reference: paymentRequest.id },
     });
 
     res.status(201).json({
@@ -154,10 +156,10 @@ router.get('/:id', async (req: any, res) => {
       });
     }
 
-    // If payment has x402pay ID, check status
-    if (payment.x402payId) {
+    // If payment has x402pay reference, check status
+    if (payment.reference) {
       try {
-        const x402payStatus = await paymentService.checkPaymentStatus(payment.x402payId);
+        const x402payStatus = await paymentService.checkPaymentStatus(payment.reference);
         
         // Update payment status if different
         if (x402payStatus.status !== payment.status) {
@@ -206,6 +208,9 @@ router.post('/agent-query', async (req: any, res) => {
       });
     }
 
+    // Get pricing from the service
+    const pricing = paymentService.getQueryPricing(queryType);
+
     // Process payment through x402pay service
     const paymentResult = await paymentService.processAgentQuery(userId, agentId, queryType);
 
@@ -213,10 +218,12 @@ router.post('/agent-query', async (req: any, res) => {
     const payment = await db.payment.create({
       data: {
         userId,
-        amount: 0.1, // Default query fee from pricing
+        agentId,
+        amount: pricing.amount,
         currency: 'USDC',
         type: PaymentType.QUERY_FEE,
         status: PaymentStatus.PENDING,
+        reference: paymentResult.id,
         metadata: JSON.stringify({
           agentId,
           queryType,

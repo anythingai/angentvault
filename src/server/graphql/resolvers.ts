@@ -3,11 +3,13 @@ import { CDPWalletService } from '../services/CDPWalletService';
 import { X402PayService } from '../services/X402PayService';
 import { MarketDataService } from '../services/MarketDataService';
 import { AgentOrchestrator } from '../services/AgentOrchestrator';
+import { BedrockService } from '../services/BedrockService';
 import { logger } from '../utils/logger';
 import { GraphQLScalarType, Kind } from 'graphql';
+import { websocketHandler } from '../websocket/handler';
 
 const db = new PrismaClient();
-const orchestrator = new AgentOrchestrator();
+const orchestrator = new AgentOrchestrator(websocketHandler);
 
 // Modify the JSON scalar implementation
 function parseAST(ast: any): any {
@@ -70,42 +72,6 @@ const resolvers = {
       return 'AgentVault GraphQL API is running!';
     },
 
-    // Demo query for hackathon judges - showcases all integrations
-    hackathonDemo: async () => {
-      const results = {
-        timestamp: new Date().toISOString(),
-        integrations: {
-          bedrock: {
-            status: 'configured',
-            message: 'Amazon Bedrock Nova AI analysis ready'
-          },
-          cdpWallet: {
-            status: 'configured',
-            message: 'CDP Wallet integration ready'
-          },
-          x402pay: {
-            status: 'configured',
-            message: 'x402pay micropayment processing ready'
-          },
-          pinata: {
-            status: 'configured',
-            message: 'Pinata IPFS storage ready'
-          },
-          marketData: {
-            status: 'configured',
-            message: 'Market data service ready'
-          },
-          summary: {
-            totalIntegrations: 5,
-            readyForDemo: true,
-            message: 'All sponsor technologies integrated and ready for judging'
-          }
-        }
-      };
-
-      return results;
-    },
-
     // Test CDP connection
     testCDPConnection: async () => {
       try {
@@ -136,7 +102,8 @@ const resolvers = {
 
         return agents.map(agent => ({
           ...agent,
-          config: typeof agent.config === 'string' ? JSON.parse(agent.config) : agent.config || {}
+          config: agent.strategy || {},
+          metadata: agent.riskParameters || {}
         }));
       } catch (error) {
         logger.error('Failed to fetch agents:', error);
@@ -151,14 +118,10 @@ const resolvers = {
         if (!userId) throw new Error('Authentication required');
 
         const agent = await db.agent.findFirst({
-          where: { id, ownerId: userId },
+          where: { id, userId },
           include: {
             trades: {
-              orderBy: { createdAt: 'desc' }
-            },
-            analyses: {
-              take: 10,
-              orderBy: { createdAt: 'desc' }
+              orderBy: { executedAt: 'desc' }
             }
           }
         });
@@ -167,13 +130,13 @@ const resolvers = {
 
         return {
           ...agent,
-          config: typeof agent.config === 'string' ? JSON.parse(agent.config) : agent.config || {},
-          metadata: typeof agent.metadata === 'string' ? JSON.parse(agent.metadata) : agent.metadata,
-          performance: {
-            totalTrades: agent.trades.length,
-            winRate: agent.trades.length ? 
-              (agent.trades.filter(t => t.status === 'EXECUTED').length / agent.trades.length) * 100 : 0,
-            totalReturn: agent.trades.reduce((sum, t) => sum + (t.price * t.amount), 0)
+          config: agent.strategy || {},
+          metadata: agent.riskParameters || {},
+          performance: agent.performance || {
+            totalTrades: agent.trades?.length || 0,
+            winRate: agent.trades?.length ? 
+              (agent.trades.filter((t: any) => t.status === 'success').length / agent.trades.length) * 100 : 0,
+            totalReturn: agent.trades?.reduce((sum: number, t: any) => sum + (t.usdValue || 0), 0) || 0
           }
         };
       } catch (error) {
@@ -208,13 +171,13 @@ const resolvers = {
           symbol: b.asset,
           amount: b.balance,
           value: b.balanceUSD,
-          change24h: Math.random() * 10 - 5 // Mock 24h change
+          change24h: 0 // Would require price history tracking in production
         }));
 
         return {
           totalValue,
-          totalPnL: totalValue * 0.1, // Mock 10% gain
-          pnlPercentage: 10,
+          totalPnL: 0,
+          pnlPercentage: 0,
           assets
         };
       } catch (error) {
@@ -227,6 +190,44 @@ const resolvers = {
         };
       }
     },
+
+    // --------------------------------------------------
+    // NEW: Return the current authenticated user (for "me" query)
+    // --------------------------------------------------
+    me: async (_: any, __: any, context: any) => {
+      if (!context.user) {
+        throw new Error('Authentication required');
+      }
+      // In most cases we just need the user that auth middleware already attached.
+      // If we ever need fresher data we can re-fetch from DB, but this suffices.
+      return {
+        id: context.user.id,
+        email: context.user.email || '',
+        name: context.user.name || '',
+        walletAddress: context.user.walletAddress || '',
+        subscription: context.user.subscription || 'basic',
+        isVerified: true,
+        createdAt: new Date(),
+      };
+    },
+
+    // --------------------------------------------------
+    // NEW: Generate a minimal trading decision via Bedrock (agentDecision query)
+    // --------------------------------------------------
+    agentDecision: async (_: any, { symbol }: { symbol: string }, context: any) => {
+      try {
+        const bedrock: BedrockService = context.services?.bedrock || new BedrockService();
+        const decision = await bedrock.generateAgentDecision(symbol);
+        return {
+          symbol: decision.symbol || symbol,
+          side: decision.side || 'HOLD',
+          confidence: decision.confidence ?? 0.5,
+        };
+      } catch (error) {
+        logger.error('Failed to generate agent decision:', error);
+        throw error;
+      }
+    },
   },
 
   Mutation: {
@@ -237,9 +238,10 @@ const resolvers = {
           data: {
             name: input.name,
             description: input.description,
-            ownerId: input.ownerId || 'demo-user',
-            config: JSON.stringify(input.config || {}),
-            status: 'PAUSED'
+            userId: input.ownerId,
+            strategy: JSON.stringify(input.config || {}),
+            riskParameters: JSON.stringify(input.metadata || {}),
+            status: 'active'
           }
         });
 
@@ -247,7 +249,8 @@ const resolvers = {
 
         return {
           ...agent,
-          config: typeof agent.config === 'string' ? JSON.parse(agent.config) : agent.config || {}
+          config: typeof agent.strategy === 'string' ? JSON.parse(agent.strategy) : {},
+          metadata: typeof agent.riskParameters === 'string' ? JSON.parse(agent.riskParameters) : {}
         };
       } catch (error) {
         logger.error('Failed to create agent:', error);
@@ -262,7 +265,7 @@ const resolvers = {
         if (!userId) throw new Error('Authentication required');
 
         const agent = await db.agent.findFirst({
-          where: { id, ownerId: userId }
+          where: { id, userId }
         });
 
         if (!agent) throw new Error('Agent not found');
@@ -271,13 +274,14 @@ const resolvers = {
 
         const updatedAgent = await db.agent.update({
           where: { id },
-          data: { status: 'ACTIVE' }
+          data: { status: 'active' }
         });
 
         return {
           ...updatedAgent,
-          config: typeof updatedAgent.config === 'string' ? JSON.parse(updatedAgent.config) : updatedAgent.config || {},
-          performance: {
+          config: typeof updatedAgent.strategy === 'string' ? JSON.parse(updatedAgent.strategy) : {},
+          metadata: typeof updatedAgent.riskParameters === 'string' ? JSON.parse(updatedAgent.riskParameters) : {},
+          performance: typeof updatedAgent.performance === 'string' ? JSON.parse(updatedAgent.performance) : {
             totalTrades: 0,
             winRate: 0,
             totalReturn: 0
@@ -296,7 +300,7 @@ const resolvers = {
         if (!userId) throw new Error('Authentication required');
 
         const agent = await db.agent.findFirst({
-          where: { id, ownerId: userId }
+          where: { id, userId }
         });
 
         if (!agent) throw new Error('Agent not found');
@@ -305,13 +309,14 @@ const resolvers = {
 
         const updatedAgent = await db.agent.update({
           where: { id },
-          data: { status: 'PAUSED' }
+          data: { status: 'paused' }
         });
         
         return {
           ...updatedAgent,
-          config: typeof updatedAgent.config === 'string' ? JSON.parse(updatedAgent.config) : updatedAgent.config || {},
-          performance: {
+          config: typeof updatedAgent.strategy === 'string' ? JSON.parse(updatedAgent.strategy) : {},
+          metadata: typeof updatedAgent.riskParameters === 'string' ? JSON.parse(updatedAgent.riskParameters) : {},
+          performance: typeof updatedAgent.performance === 'string' ? JSON.parse(updatedAgent.performance) : {
             totalTrades: 0,
             winRate: 0,
             totalReturn: 0
@@ -333,43 +338,70 @@ const resolvers = {
         const payment = await paymentService.processAgentQuery(userId, agentId, 'trade_execution');
 
         return {
-          id: payment.id || 'demo-payment',
+          id: payment.id,
           amount,
           status: 'COMPLETED',
-          transactionHash: payment.transactionHash || 'demo-tx-hash',
+          transactionHash: payment.transactionHash,
           createdAt: new Date()
         };
       } catch (error) {
         logger.error('Failed to execute payment:', error);
         throw error;
       }
-    }
-  },
-
-  // Subscriptions for real-time updates
-  Subscription: {
-    agentStatusUpdated: {
-      subscribe: () => {
-        // WebSocket subscription implementation
-        // This would use a pub/sub system like Redis
-        return {
-          [Symbol.asyncIterator]: async function* () {
-            // Mock implementation for now
-            yield { agentStatusUpdated: { id: '1', status: 'active' } };
-          },
-        };
-      },
     },
 
-    tradeExecuted: {
-      subscribe: () => {
+    // --------------------------------------------------
+    // NEW: Deploy an agent (start it via AgentOrchestrator)
+    // --------------------------------------------------
+    deployAgent: async (_: any, { id }: { id: string }) => {
+      try {
+        await orchestrator.startAgent(id);
+
         return {
-          [Symbol.asyncIterator]: async function* () {
-            // Mock implementation for now
-            yield { tradeExecuted: { id: '1', status: 'executed' } };
-          },
+          success: true,
+          agent: { id },
+          message: 'Agent deployment initiated successfully',
         };
-      },
+      } catch (error) {
+        logger.error('Failed to deploy agent:', error);
+        return {
+          success: false,
+          agent: { id },
+          message: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    },
+
+    // --------------------------------------------------
+    // NEW: Process an arbitrary payment using x402pay
+    // --------------------------------------------------
+    processPayment: async (_: any, { input }: any) => {
+      try {
+        const paymentService = new X402PayService();
+        const paymentRequest = await paymentService.createPaymentRequest({
+          amount: input.amount,
+          currency: input.currency,
+          recipient: input.recipient,
+          metadata: {
+            type: input.type,
+            ...input.metadata,
+          },
+        });
+
+        return {
+          id: paymentRequest.id || 'payment-request',
+          userId: 'system',
+          amount: input.amount,
+          currency: input.currency,
+          type: input.type,
+          status: 'PENDING',
+          transactionHash: paymentRequest.transactionHash || null,
+          createdAt: new Date(),
+        };
+      } catch (error) {
+        logger.error('Failed to process payment:', error);
+        throw error;
+      }
     },
   },
 }; 

@@ -11,7 +11,7 @@ const WalletProvider = dynamic(() => import('./providers/WalletProvider'), { ssr
 
 export const metadata: Metadata = {
   title: 'AgentVault - Autonomous Crypto Investment Platform',
-  description: 'AI-powered autonomous cryptocurrency investment agents with x402pay monetization, CDP Wallet integration, Amazon Bedrock Nova AI, and Akash Network deployment - Built for Coinbase Agents in Action Hackathon',
+  description: 'AI-powered autonomous crypto investment platform with advanced agent technology',
   keywords: ['crypto', 'AI', 'autonomous', 'investment', 'DeFi', 'blockchain', 'x402pay', 'CDP', 'Bedrock', 'Akash'],
   authors: [{ name: 'AgentVault Team' }],
   openGraph: {
