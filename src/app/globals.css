@@ -39,11 +39,11 @@
 @layer components {
   /* Enhanced button styles */
   .btn-primary {
-    @apply bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900;
+    @apply bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl;
   }
 
   .btn-secondary {
-    @apply bg-gray-800 hover:bg-gray-700 text-gray-100 border border-gray-600 hover:border-gray-500 font-medium px-6 py-3 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900;
+    @apply bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors;
   }
 
   .btn-ghost {
@@ -60,15 +60,19 @@
 
   /* Enhanced card styles */
   .crypto-card {
-    @apply bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-xl hover:shadow-2xl hover:border-purple-500/30 transition-all duration-300 hover:transform hover:scale-[1.02];
+    @apply bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl shadow-xl;
   }
 
   .glass-card {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl hover:bg-white/10 transition-all duration-300;
+    @apply bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg;
   }
 
   .metric-card {
-    @apply crypto-card p-6 text-center relative overflow-hidden;
+    @apply crypto-card p-6;
+  }
+
+  .card {
+    @apply crypto-card p-6;
   }
 
   .metric-card::before {
@@ -278,6 +282,23 @@
   .floating-delayed {
     animation: floating 3s ease-in-out infinite 1.5s;
   }
+
+  /* Progress bar classes to replace inline styles */
+  .progress-bar-low {
+    width: 35%;
+  }
+
+  .progress-bar-medium {
+    width: 45%;
+  }
+
+  .progress-bar-high {
+    width: 20%;
+  }
+
+  .progress-bar-custom {
+    /* width: var(--width);  */
+  }
 }
 
 @layer utilities {
@@ -418,9 +439,7 @@
 
 /* Loading skeleton improvements */
 .skeleton {
-  @apply animate-pulse bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 rounded-lg;
-  background-size: 200% 200%;
-  animation: shimmer 1.5s infinite;
+  @apply bg-gray-700 animate-pulse rounded-lg;
 }
 
 @keyframes shimmer {
@@ -485,14 +504,18 @@
 }
 
 /* Progress bar utilities */
+/*
 .progress-bar {
   width: calc(var(--width, 0) * 1%);
 }
+*/
 
 /* Dynamic width utilities for data attributes */
+/*
 [style*="--width"] {
   width: calc(var(--width, 0) * 1%);
 }
+*/
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {

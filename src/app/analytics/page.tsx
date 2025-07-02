@@ -228,10 +228,9 @@ export default function AnalyticsPage() {
                     <span className="text-gray-400 text-sm">{risk.level}</span>
                     <div className="flex items-center space-x-2">
                       <div className="w-24 bg-gray-700 rounded-full h-2">
-                                                 <div 
-                           className={`${risk.color} h-2 rounded-full`}
-                           style={{ '--width': risk.percentage } as React.CSSProperties & { '--width': number }}
-                         ></div>
+                        <div 
+                          className={`${risk.color} h-2 rounded-full w-[${risk.percentage}%]`}
+                        ></div>
                       </div>
                       <span className="text-white text-sm w-8">{risk.percentage}%</span>
                     </div>

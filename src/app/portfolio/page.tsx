@@ -282,8 +282,7 @@ export default function PortfolioPage() {
                         <div className="flex items-center justify-end">
                           <div className="w-20 bg-gray-700 rounded-full h-2 mr-2">
                             <div
-                              className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full"
-                              style={{ width: `${Math.min(asset.allocation, 100)}%` }}
+                              className={`bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full w-[${Math.min(asset.allocation, 100)}%]`}
                             ></div>
                           </div>
                           <div className="text-sm font-semibold text-white w-12">
