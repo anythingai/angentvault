@@ -11,14 +11,13 @@ process.env.CDP_WALLET_ID = 'test-wallet';
 process.env.PINATA_JWT = 'test-pinata-jwt';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
 process.env.REDIS_URL = 'redis://localhost:6379';
-process.env.X402_PAY_API_KEY = 'test-x402-key';
-process.env.X402_PAY_SECRET_KEY = 'test-x402-secret';
 process.env.X402_PAY_WEBHOOK_SECRET = 'test-webhook-secret';
 process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID = 'test-walletconnect-id';
 process.env.COINGECKO_API_KEY = 'test-coingecko-key';
 process.env.ENABLE_DEMO_MODE = 'true';
 
-jest.mock('@coinbase/x402', () => ({
+// Mock x402 middleware functionality
+jest.mock('x402-express', () => ({
   createPaymentRequiredResponse: jest.fn(() => ({ mock: true })),
   verifyExactPayment: jest.fn(() => true),
 }));
@@ -37,5 +36,6 @@ describe('Services unit tests', () => {
     const walletSvc = new CDPWalletService();
     const result = await walletSvc.testConnection();
     expect(result).toHaveProperty('success');
+    expect(result).toHaveProperty('message');
   });
 }); 

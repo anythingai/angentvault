@@ -1,4 +1,4 @@
-// Mock environment variables before importing config
+// Set test environment variables before any imports
 process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.ENCRYPTION_KEY = 'test-encryption-key';
 process.env.AWS_ACCESS_KEY_ID = 'test-aws-key';
@@ -9,13 +9,14 @@ process.env.CDP_WALLET_ID = 'test-wallet-id';
 process.env.PINATA_JWT = 'test-pinata-jwt';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
 process.env.REDIS_URL = 'redis://localhost:6379';
-process.env.X402_PAY_API_KEY = 'test-x402-key';
-process.env.X402_PAY_SECRET_KEY = 'test-x402-secret';
 process.env.X402_PAY_WEBHOOK_SECRET = 'test-webhook-secret';
 process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID = 'test-walletconnect-id';
 process.env.COINGECKO_API_KEY = 'test-coingecko-key';
 
-import { config } from '../config';
+let config;
+beforeAll(async () => {
+  config = (await import('../config')).config;
+});
 
 describe('Configuration', () => {
   it('should load configuration without throwing', () => {

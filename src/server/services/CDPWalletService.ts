@@ -2,67 +2,124 @@ import { config } from '../config';
 import { logger } from '../utils/logger';
 import { WalletBalance, TradeType } from '../../types';
 
-// Import CDP SDK with error handling
-let Coinbase: any;
-let Wallet: any;
-try {
-  const cdpSdk = require('@coinbase/coinbase-sdk');
-  Coinbase = cdpSdk.Coinbase;
-  Wallet = cdpSdk.Wallet;
-  logger.info('CDP SDK loaded successfully', { 
-    exports: Object.keys(cdpSdk),
-    version: '0.20.0'
-  });
-} catch (e) {
-  logger.error('CDP SDK module not found - production requires valid CDP SDK installation');
-  throw new Error('CDP SDK is required for production deployment. Please install @coinbase/coinbase-sdk package.');
-}
+// Use dynamic import for CDP SDK to support ESM compatibility
+let CdpClient: any;
 
 export class CDPWalletService {
   private cdp: any = null;
   private walletCache: Map<string, any> = new Map();
 
   constructor() {
-    // Production requires valid CDP credentials
-    const apiKeyName = config.cdp.apiKeyId;
-    const privateKey = config.cdp.apiKeySecret;
+    this.initializeCDP();
+  }
 
-    if (!apiKeyName || !privateKey) {
-      throw new Error('CDP credentials are required for production. Set CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables.');
-    }
-
-    if (!Coinbase) {
-      throw new Error('CDP SDK not available. Please install @coinbase/coinbase-sdk package.');
-    }
-
+  private async initializeCDP() {
     try {
-      // Configure Coinbase with proper authentication
-      Coinbase.configure(apiKeyName, privateKey);
-      this.cdp = Coinbase;
+      // Dynamic import for ESM compatibility
+      const cdpModule = await import('@coinbase/cdp-sdk');
+      CdpClient = (cdpModule as any).CdpClient;
+
+      // Use the new CDP SDK (v2)
+      const apiKeyId = config.cdp.apiKeyId;
+      const apiKeySecret = config.cdp.apiKeySecret;
+
+      if (!apiKeyId || !apiKeySecret) {
+        throw new Error('CDP credentials are required for production. Set CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables.');
+      }
+
+      this.cdp = new CdpClient({
+        apiKeyId,
+        apiKeySecret,
+      });
       
-      logger.info('CDP SDK initialized successfully', {
-        apiKeyName: `${apiKeyName.substring(0, 8)}...`,
-        network: config.cdp.network,
-        apiVersion: require('@coinbase/coinbase-sdk/package.json').version,
+      logger.info('CDP v2 SDK (CdpClient) initialized successfully', {
+        apiKeyId: `${apiKeyId.substring(0, 8)}...`,
       });
     } catch (error) {
-      logger.error('CDP SDK initialization failed:', error);
-      throw new Error(`CDP SDK initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      logger.error('CDP v2 SDK initialization failed:', error);
+      throw new Error(`CDP v2 SDK initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   // Test connection - now required for production
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
-      const wallets = await Wallet.list();
+      // Ensure CDP client is initialized
+      await this.ensureCDPInitialized();
+      
+      // Try to create an EVM account (wallet)
+      const account = await this.cdp.evm.createAccount();
       return {
         success: true,
-        message: `CDP connection successful. Found ${wallets.length} existing wallets.`
+        message: `CDP v2 connection successful. Created test account: ${account.getId()}`
       };
     } catch (error) {
       return {
         success: false,
-        message: `CDP connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        message: `CDP v2 connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  // Helper method to ensure CDP client is initialized
+  private async ensureCDPInitialized(): Promise<void> {
+    if (!this.cdp) {
+      await this.initializeCDP();
+    }
+  }
+
+  // Validate CDP credentials
+  private async validateCredentials(): Promise<{ success: boolean; message: string }> {
+    try {
+      const apiKeyId = config.cdp.apiKeyId;
+      const apiKeySecret = config.cdp.apiKeySecret;
+
+      // Basic validation
+      if (!apiKeyId || apiKeyId.length < 10) {
+        return {
+          success: false,
+          message: 'Invalid CDP API Key ID format. Should be a UUID-like string.'
+        };
+      }
+
+      if (!apiKeySecret || apiKeySecret.length < 20) {
+        return {
+          success: false,
+          message: 'Invalid CDP API Key Secret format. Should be a base64-encoded string.'
+        };
+      }
+
+      // Test if we can create a wallet (this will validate the credentials)
+      try {
+        await this.cdp.evm.createAccount();
+        return {
+          success: true,
+          message: 'CDP credentials validated successfully.'
+        };
+      } catch (createError) {
+        const errorMessage = createError instanceof Error ? createError.message : 'Unknown error';
+        
+        if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+          return {
+            success: false,
+            message: 'CDP API authentication failed. Please check your API key and secret.'
+          };
+        } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+          return {
+            success: false,
+            message: 'CDP API access denied. Please check your API key permissions.'
+          };
+        } else {
+          return {
+            success: false,
+            message: `CDP credential validation failed: ${errorMessage}`
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Credential validation error: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }
@@ -70,28 +127,71 @@ export class CDPWalletService {
   async createWallet(userId: string): Promise<any> {
     try {
       const networkId = config.cdp.network || 'base-sepolia';
-      const wallet = await Wallet.create({ networkId });
+      
+      // Validate network ID
+      if (!networkId || !['base-sepolia', 'base-mainnet'].includes(networkId)) {
+        throw new Error(`Invalid network ID: ${networkId}. Must be 'base-sepolia' or 'base-mainnet'`);
+      }
+
+      logger.info('Attempting to create CDP wallet', {
+        userId,
+        networkId,
+        apiKeyId: config.cdp.apiKeyId ? `${config.cdp.apiKeyId.substring(0, 8)}...` : 'NOT_SET'
+      });
+
+      // Create wallet with proper error handling
+      const wallet = await this.cdp.evm.createAccount();
+      
+      if (!wallet || !wallet.getId()) {
+        throw new Error('Wallet creation returned invalid wallet object');
+      }
       
       // Cache the wallet for this user
       this.walletCache.set(userId, wallet);
       
       // Store wallet data securely
       await this.storeWalletData(userId, {
-        walletId: wallet.id,
-        addresses: wallet.addresses,
+        walletId: wallet.getId(),
+        addresses: wallet.getAddresses(),
         network: networkId
       });
       
       logger.info('CDP wallet created successfully', {
         userId,
-        walletId: wallet.id,
-        addressCount: wallet.addresses?.length || 0
+        walletId: wallet.getId(),
+        addressCount: wallet.getAddresses()?.length || 0
       });
 
       return wallet;
     } catch (error) {
-      logger.error('Wallet creation failed', { userId, error });
-      throw new Error(`Wallet creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Enhanced error logging for debugging
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorName = error instanceof Error ? error.name : 'Unknown';
+      
+      logger.error('Wallet creation failed', { 
+        userId, 
+        error: {
+          name: errorName,
+          message: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined
+        },
+        config: {
+          network: config.cdp.network,
+          apiKeySet: !!config.cdp.apiKeyId,
+          apiSecretSet: !!config.cdp.apiKeySecret
+        }
+      });
+      
+      // Provide more specific error messages
+      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        throw new Error('CDP API authentication failed. Please check your API key and secret.');
+      } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+        throw new Error('CDP API access denied. Please check your API key permissions.');
+      } else if (errorMessage.includes('429') || errorMessage.includes('Rate limit')) {
+        throw new Error('CDP API rate limit exceeded. Please try again later.');
+      } else {
+        throw new Error(`Wallet creation failed: ${errorMessage}`);
+      }
     }
   }
 
@@ -99,6 +199,12 @@ export class CDPWalletService {
     // Check cache first
     if (this.walletCache.has(userId)) {
       return this.walletCache.get(userId);
+    }
+
+    // Validate credentials before attempting wallet operations
+    const credentialValidation = await this.validateCredentials();
+    if (!credentialValidation.success) {
+      throw new Error(`CDP credentials validation failed: ${credentialValidation.message}`);
     }
 
     // Try to import existing wallet
@@ -119,14 +225,18 @@ export class CDPWalletService {
       }
 
       // Import real wallet using wallet ID
-      const wallet = await Wallet.fetch(walletData.walletId);
+      const wallet = await this.cdp.evm.createAccount({
+        walletId: walletData.walletId,
+        addresses: walletData.addresses,
+        network: walletData.network,
+      });
       
       // Cache the wallet
       this.walletCache.set(userId, wallet);
       
       logger.info('Wallet imported successfully', {
         userId,
-        walletId: wallet.id,
+        walletId: wallet.getId(),
       });
 
       return wallet;
@@ -142,7 +252,7 @@ export class CDPWalletService {
       const walletBalances: WalletBalance[] = [];
 
       // Get the default address
-      const address = wallet.getDefaultAddress ? await wallet.getDefaultAddress() : wallet.addresses?.[0];
+      const address = wallet.getDefaultAddress ? await wallet.getDefaultAddress() : wallet.getAddresses()?.[0];
       
       if (!address) {
         throw new Error('No address found for wallet');
@@ -152,12 +262,12 @@ export class CDPWalletService {
       const balances = await address.listBalances?.() || [];
       
       for (const balance of balances) {
-        if (!asset || balance.asset.symbol === asset) {
-          const amount = parseFloat(balance.amount || '0');
-          const usdValue = amount * (balance.asset?.usdPrice || 0);
+        if (!asset || balance.getAsset()?.getSymbol() === asset) {
+          const amount = parseFloat(balance.getAmount() || '0');
+          const usdValue = amount * (balance.getAsset()?.getUsdPrice() || 0);
         
           walletBalances.push({
-            asset: balance.asset?.symbol || 'UNKNOWN',
+            asset: balance.getAsset()?.getSymbol() || 'UNKNOWN',
             balance: amount,
             balanceUSD: usdValue,
           });
@@ -187,7 +297,7 @@ export class CDPWalletService {
       const wallet = await this.getOrCreateWallet(userId);
       
       // Execute real trade using CDP SDK
-      const address = wallet.addresses[0];
+      const address = wallet.getAddresses()[0];
       
       const trade = await address.createTrade({
         amount: amount.toString(),
@@ -204,18 +314,18 @@ export class CDPWalletService {
         toAsset,
         amount,
         tradeType,
-        transactionHash: trade.transaction.transactionHash,
+        transactionHash: trade.getTransaction()?.getTransactionHash(),
       });
 
       return {
         success: true,
-        transactionHash: trade.transaction.transactionHash,
+        transactionHash: trade.getTransaction()?.getTransactionHash(),
         fromAsset,
         toAsset,
         amount,
         executedAt: new Date(),
-        price: trade.transaction.value || 0,
-        usdValue: amount * (trade.transaction.value || 0),
+        price: trade.getTransaction()?.getValue() || 0,
+        usdValue: amount * (trade.getTransaction()?.getValue() || 0),
       };
     } catch (error) {
       logger.error('Trade execution failed:', error);
@@ -233,7 +343,7 @@ export class CDPWalletService {
       const wallet = await this.getOrCreateWallet(userId);
       
       // Execute real transfer
-      const address = wallet.addresses[0];
+      const address = wallet.getAddresses()[0];
       
       const transfer = await address.createTransfer({
         amount: amount.toString(),
@@ -249,12 +359,12 @@ export class CDPWalletService {
         destinationAddress,
         amount,
         asset,
-        transactionHash: transfer.transaction.transactionHash,
+        transactionHash: transfer.getTransaction()?.getTransactionHash(),
       });
 
       return {
         success: true,
-        transactionHash: transfer.transaction.transactionHash,
+        transactionHash: transfer.getTransaction()?.getTransactionHash(),
         destinationAddress,
         amount,
         asset,
@@ -272,24 +382,24 @@ export class CDPWalletService {
       const transactions: any[] = [];
       
       // Get transactions from all addresses
-      for (const address of wallet.addresses) {
+      for (const address of wallet.getAddresses()) {
         const addressTransactions = await address.listTransactions({ limit });
         
         transactions.push(...addressTransactions.map((tx: any) => ({
-          hash: tx.transactionHash,
-          from: tx.fromAddress,
-          to: tx.toAddress,
-          value: tx.value,
-          timestamp: tx.blockTimestamp,
-          status: tx.status,
-          asset: tx.asset,
-          amount: tx.amount,
+          hash: tx.getTransactionHash(),
+          from: tx.getFromAddress(),
+          to: tx.getToAddress(),
+          value: tx.getValue(),
+          timestamp: tx.getBlockTimestamp(),
+          status: tx.getStatus(),
+          asset: tx.getAsset(),
+          amount: tx.getAmount(),
         })));
       }
 
       // Sort by timestamp descending
       transactions.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        new Date(b.getTimestamp()).getTime() - new Date(a.getTimestamp()).getTime()
       );
 
       return transactions.slice(0, limit);

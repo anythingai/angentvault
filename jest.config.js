@@ -1,6 +1,6 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  preset: 'ts-jest',
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   rootDir: '.',
   testMatch: [
@@ -13,12 +13,17 @@ module.exports = {
     '!src/**/__tests__/**',
     '!src/types/**'
   ],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
+  extensionsToTreatAsEsm: ['.ts'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+    },
   },
-  // Transform ES modules that cause issues
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   transformIgnorePatterns: [
-    'node_modules/(?!(jose|@coinbase/x402|@coinbase/cdp-sdk|x402-express|x402-fetch)/)',
+    "/node_modules/(?!(@coinbase/cdp-sdk|jose)/)"
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   transform: {

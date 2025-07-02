@@ -6,6 +6,7 @@ dotenv.config();
 
 // Validate required environment variables for production
 function validateRequiredEnvVars() {
+  const isProduction = process.env.NODE_ENV === 'production';
   const requiredVars = [
     'JWT_SECRET',
     'ENCRYPTION_KEY',
@@ -16,16 +17,16 @@ function validateRequiredEnvVars() {
     'CDP_WALLET_ID',
     'PINATA_JWT',
     'DATABASE_URL',
-    'REDIS_URL',
-    'X402_PAY_API_KEY',
-    'X402_PAY_SECRET_KEY',
+    // REDIS_URL is only required in production
+    // 'REDIS_URL',
     'X402_PAY_WEBHOOK_SECRET',
     'NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID',
     'COINGECKO_API_KEY',
   ];
-
-  const missingVars = requiredVars.filter(envVar => !process.env[envVar]);
-
+  if (isProduction) {
+    requiredVars.push('REDIS_URL');
+  }
+  const missingVars = requiredVars.filter((key) => !process.env[key]);
   if (missingVars.length > 0) {
     // Fail fast regardless of NODE_ENV – running without secrets is never safe
     throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
@@ -72,8 +73,6 @@ export const config: AppConfig = {
     walletId: process.env.CDP_WALLET_ID || '',
   },
   x402pay: {
-    apiKey: process.env.X402_PAY_API_KEY || '',
-    secretKey: process.env.X402_PAY_SECRET_KEY || '',
     env: process.env.X402_PAY_ENV || 'sandbox',
     baseUrl:
       process.env.X402_PAY_BASE_URL ||

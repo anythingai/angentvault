@@ -309,8 +309,6 @@ export interface CDPConfig {
 }
 
 export interface X402PayConfig {
-  apiKey: string;
-  secretKey?: string;
   /**
    * Base URL for the facilitator / REST API.  This will usually resolve to either
    * https://sandbox.api.x402.dev/v1 (sandbox) or https://api.x402.dev/v1 (production)
