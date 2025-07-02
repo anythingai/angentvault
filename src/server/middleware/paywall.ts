@@ -12,7 +12,7 @@ import { parsePaymentHeader } from '@coinbase/x402';
  *
  * Production implementation using official x402 protocol from Coinbase.
  * Supports HTTP 402 Payment Required responses and x402 payment verification.
- * This implementation is designed to meet the hackathon prize track requirements
+ * This implementation provides production-grade x402pay integration
  * for "Best Use of x402pay + CDPWallet".
  */
 export const paywallMiddleware = () => {

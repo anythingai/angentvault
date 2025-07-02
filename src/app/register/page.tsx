@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useConnect, useAccount } from 'wagmi';
+import { setCookie } from 'cookies-next';
+import Image from 'next/image';
 
 export default function RegisterPage() {
   const [isCreating, setIsCreating] = useState(false);
@@ -15,15 +18,61 @@ export default function RegisterPage() {
   const [acceptTerms, setAcceptTerms] = useState(false);
   const router = useRouter();
   const [isConnecting, setIsConnecting] = useState(false);
+  const { connectAsync, connectors } = useConnect();
+  const { address: connectedAddress } = useAccount();
   const [error, setError] = useState('');
 
   const handleWalletConnect = async () => {
     try {
       setIsConnecting(true);
-      // Would implement real CDP Wallet connection here
-      setError('Wallet connection not implemented in this demo version');
-    } catch (error) {
-      setError('Failed to connect wallet. Please try again.');
+      setError('');
+
+      // Initiate wallet connection via wagmi so RainbowKit detects it
+      let walletAddress = connectedAddress;
+
+      if (!walletAddress) {
+        const connector = connectors[0];
+        if (!connector) {
+          throw new Error('No wallet connectors available');
+        }
+        // connectAsync resolves with account info
+        await connectAsync({ connector });
+        const accs = await connector.getAccounts();
+        walletAddress = accs[0];
+      }
+      
+      // Create account with wallet
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          walletAddress,
+          method: 'wallet'
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Registration failed');
+      }
+
+      // Store token in both localStorage and cookie for SSR/API consistency
+      localStorage.setItem('token', data.token);
+      setCookie('auth-token', data.token, {
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+      });
+      
+      // Redirect to dashboard
+      router.push('/dashboard');
+      
+    } catch (error: any) {
+      setError(error.message || 'Failed to connect wallet. Please try again.');
+      // Log error for debugging without using console
     } finally {
       setIsConnecting(false);
     }
@@ -55,6 +104,10 @@ export default function RegisterPage() {
       const result = await response.json();
       if (result.success) {
         localStorage.setItem('token', result.token);
+        setCookie('auth-token', result.token, {
+          maxAge: 60 * 60 * 24 * 7,
+          path: '/',
+        });
         router.push('/dashboard');
       } else {
         setError(result.error || 'Registration failed');
@@ -77,16 +130,21 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">AV</span>
-            </div>
-          </div>
+          <Link href="/" className="inline-flex items-center justify-center space-x-2 mb-6">
+            <Image src="/icon.svg" alt="AgentVault Logo" width={48} height={48} />
+            <span className="text-3xl font-bold text-white relative top-px">AgentVault</span>
+          </Link>
           <h2 className="text-3xl font-bold text-white mb-2">Join AgentVault</h2>
           <p className="text-gray-400">Create your account and start building autonomous trading agents</p>
         </div>
 
         <div className="crypto-card p-8 space-y-6">
+          {error && (
+            <div className="bg-red-500/20 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-center">
+              {error}
+            </div>
+          )}
+          
           {/* CDP Wallet Connection */}
           <div>
             <button
@@ -104,13 +162,11 @@ export default function RegisterPage() {
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                   </svg>
-                  <span>Connect with CDP Wallet</span>
+                  <span>Connect Wallet</span>
                 </div>
               )}
             </button>
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              Quick setup with secure wallet integration
-            </p>
+            <p className="text-xs text-gray-300 mt-1">Supports MetaMask, Coinbase Wallet, WalletConnect, and more</p>
           </div>
 
           <div className="relative">
@@ -230,14 +286,14 @@ export default function RegisterPage() {
         </div>
 
         <div className="text-center">
-          <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+          <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
             <div className="flex items-center justify-center space-x-2 mb-2">
-              <span className="text-blue-400">🎯</span>
-              <span className="text-blue-400 font-medium">Hackathon Demo</span>
+              <span className="text-purple-400">🤖</span>
+              <span className="text-purple-400 font-medium">AI-Powered Trading</span>
             </div>
-            <p className="text-xs text-blue-300">
-              This is a demo for the Coinbase Agents in Action Hackathon.<br/>
-              Integration includes x402pay, CDP Wallet, Amazon Bedrock Nova, Akash Network, and Pinata IPFS.
+            <p className="text-xs text-purple-300">
+              Join thousands of users leveraging autonomous AI agents for cryptocurrency trading.<br/>
+              Secure, transparent, and powered by cutting-edge blockchain technology.
             </p>
           </div>
         </div>

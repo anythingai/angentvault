@@ -16,47 +16,129 @@ export default async function handler(
   }
 
   try {
-    // Verify JWT token properly
+    // Require authentication for all requests
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const decoded = await verifyToken(token);
-    const userId = decoded.userId;
+    // Verify JWT token
+    let userId: string;
+    try {
+      const decoded = await verifyToken(token);
+      userId = decoded.userId;
+    } catch (error) {
+      logger.warn('Invalid token in portfolio request', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
 
-    // Get portfolio from database
-    let portfolio = await prisma.portfolio.findMany({
-      where: { userId },
-      orderBy: { balanceUSD: 'desc' },
+    // Ensure user exists in database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        agents: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            performance: true,
+            createdAt: true,
+          }
+        }
+      }
     });
 
-    // If no portfolio exists, get balance from CDP wallet
-    if (portfolio.length === 0) {
-      const balances = await cdpWalletService.getBalance(userId);
-      
-      // Create portfolio entries
-      for (const balance of balances) {
-        await prisma.portfolio.create({
-          data: {
-            userId,
-            asset: balance.asset,
-            balance: balance.balance,
-            balanceUSD: balance.balanceUSD,
-          },
-        });
-      }
-
-      // Fetch the created portfolio
-      portfolio = await prisma.portfolio.findMany({
-        where: { userId },
-        orderBy: { balanceUSD: 'desc' },
+    if (!user) {
+      logger.warn('User not found for valid token - user may have been deleted', { userId });
+      return res.status(401).json({ 
+        error: 'Invalid session',
+        message: 'Your account was not found. Please login again.'
       });
     }
 
-    res.json({ portfolio });
+    // Get wallet balance and portfolio data from CDP
+    let walletBalance = 0;
+    let portfolioData: any[] = [];
+    
+    try {
+      const balances = await cdpWalletService.getBalance(userId);
+      if (balances && balances.length > 0) {
+        walletBalance = balances.reduce((sum, balance) => sum + (balance.balanceUSD || 0), 0);
+        portfolioData = balances;
+      }
+    } catch (walletError) {
+      logger.error('Failed to fetch wallet balance', { 
+        userId, 
+        error: walletError instanceof Error ? walletError.message : 'Unknown wallet error' 
+      });
+      // Continue with partial data rather than failing completely
+    }
+
+    // Calculate portfolio metrics
+    const totalAgents = user.agents.length;
+    const activeAgents = user.agents.filter(agent => agent.status === 'active').length;
+    const totalAgentBalance = 0; // Agent balances are tracked separately in Portfolio model
+
+    // Get recent portfolio performance from actual portfolio data
+    const portfolioHistory = await prisma.portfolio.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 30, // Last 30 data points
+    });
+
+    const response = {
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          subscription: user.subscription,
+          walletAddress: user.walletAddress,
+        },
+        portfolio: {
+          totalValue: walletBalance + totalAgentBalance,
+          walletBalance,
+          agentBalance: totalAgentBalance,
+          currency: 'USD',
+          lastUpdated: new Date().toISOString(),
+        },
+        agents: {
+          total: totalAgents,
+          active: activeAgents,
+          inactive: totalAgents - activeAgents,
+          list: user.agents,
+        },
+        performance: {
+          history: portfolioHistory,
+          totalReturn: portfolioHistory.length > 1 
+            ? ((portfolioHistory[0]?.balanceUSD || 0) - (portfolioHistory[portfolioHistory.length - 1]?.balanceUSD || 0))
+            : 0,
+          returnPercentage: portfolioHistory.length > 1 && portfolioHistory[portfolioHistory.length - 1]?.balanceUSD
+            ? (((portfolioHistory[0]?.balanceUSD || 0) - (portfolioHistory[portfolioHistory.length - 1]?.balanceUSD || 0)) / (portfolioHistory[portfolioHistory.length - 1]?.balanceUSD || 1)) * 100
+            : 0,
+        },
+        externalData: portfolioData,
+      },
+    };
+
+    logger.info('Portfolio data retrieved successfully', {
+      userId,
+      agentCount: totalAgents,
+      activeAgents,
+      portfolioValue: response.data.portfolio.totalValue,
+    });
+
+    res.status(200).json(response);
+
   } catch (error) {
-    logger.error('Failed to fetch portfolio:', error);
-    res.status(500).json({ error: 'Failed to fetch portfolio' });
+    logger.error('Portfolio API error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' 
+        ? (error instanceof Error ? error.message : 'Unknown error')
+        : 'Failed to fetch portfolio data',
+    });
   }
 } 

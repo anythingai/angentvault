@@ -22,36 +22,36 @@ export default async function handler(
     // Use the user's address as their unique ID
     const userId = userAddress.toLowerCase();
 
-    // Check if wallet already exists
-    let wallet = await cdpWalletService.importWallet(userId);
+    // Check if account already exists
+    let account = await cdpWalletService.importAccount(userId);
     
-    if (!wallet) {
-      // Create new CDP wallet for the user
-      wallet = await cdpWalletService.createWallet(userId);
+    if (!account) {
+      // Create new CDP account for the user
+      account = await cdpWalletService.createWallet(userId);
     }
 
     // Get initial balance
     const _balances = await cdpWalletService.getBalance(userAddress);
 
-    logger.info('CDP wallet provisioned', {
+    logger.info('CDP account provisioned', {
       userId,
-      walletId: wallet.id,
-      hasExistingWallet: !!wallet,
+      accountId: account.address,
+      hasExistingAccount: !!account,
     });
 
     return res.status(200).json({
       success: true,
-      message: 'CDP wallet provisioned successfully',
-      wallet: {
-        id: wallet.id,
-        addresses: wallet.addresses?.map((addr: any) => addr.address || addr) || [],
-        network: wallet.addresses?.[0]?.network || 'base-sepolia',
+      message: 'CDP account provisioned successfully',
+      account: {
+        id: account.address,
+        address: account.address,
+        network: 'base-sepolia',
       },
     });
   } catch (error) {
-    logger.error('Failed to provision CDP wallet:', error);
+    logger.error('Failed to provision CDP account:', error);
     return res.status(500).json({
-      error: 'Failed to provision wallet',
+      error: 'Failed to provision account',
       details: error instanceof Error ? error.message : 'Unknown error',
     });
   }

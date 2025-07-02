@@ -163,13 +163,15 @@ model AgentQuery {
   @@index([queryerId])
 }
 
-// Alert model for price alerts and notifications
+// Alert model for user notifications and alerts
 model Alert {
   id              String   @id @default(cuid())
   userId          String
-  type            String   // price, portfolio, news
-  condition       String   // Alert conditions (JSON string)
-  status          String   @default("active") // active, triggered, disabled
+  type            String   // alert_type: trade, portfolio, system, agent
+  message         String   // The alert message content
+  severity        String   @default("info") // info, warning, error, success
+  isRead          Boolean  @default(false)
+  condition       String?  // Optional: alert conditions (JSON string) for complex alerts
   lastTriggered   DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -178,7 +180,8 @@ model Alert {
   user            User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
-  @@index([status])
+  @@index([isRead])
+  @@index([severity])
 }
 
 model MarketData {

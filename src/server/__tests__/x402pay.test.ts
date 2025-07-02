@@ -16,10 +16,9 @@ process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID = 'test-walletconnect-id';
 process.env.COINGECKO_API_KEY = 'test-coingecko-key';
 process.env.ENABLE_DEMO_MODE = 'true';
 
-// Mock x402 middleware functionality
+// Mock x402 middleware functionality - only mock what actually exists
 jest.mock('x402-express', () => ({
-  createPaymentRequiredResponse: jest.fn(() => ({ mock: true })),
-  verifyExactPayment: jest.fn(() => true),
+  paymentMiddleware: jest.fn(() => (req: any, res: any, next: any) => next()),
 }));
 
 import { X402PayService } from '../services/X402PayService';

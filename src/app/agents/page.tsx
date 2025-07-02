@@ -4,8 +4,22 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AgentManagement from '../components/AgentManagement';
 
+interface Agent {
+  id: string;
+  name: string;
+  status: string;
+  performance: {
+    totalReturn: number;
+    winRate: number;
+    trades: number;
+  };
+  createdAt: string;
+}
+
 export default function AgentsPage() {
   const [isLoading, setIsLoading] = useState(true);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAgents();
@@ -13,15 +27,27 @@ export default function AgentsPage() {
 
   const fetchAgents = async () => {
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // Mock data - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock agents data exists for demo purposes
-      // In production, this would update state with fetched agents
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/agents', {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch agents: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setAgents(data.agents || []);
     } catch (error) {
-      // Handle error - could implement toast notification or error state
-      // console.error('Failed to fetch agents:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch agents';
+      setError(errorMessage);
+      // Log error for debugging without using console
     } finally {
       setIsLoading(false);
     }
@@ -42,6 +68,25 @@ export default function AgentsPage() {
     );
   }
 
+  if (error) {
+    return (
+      <main className="min-h-screen bg-gray-900 text-white p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-6">
+            <h2 className="text-xl font-bold text-red-400 mb-2">Error Loading Agents</h2>
+            <p className="text-red-300 mb-4">{error}</p>
+            <button
+              onClick={() => fetchAgents()}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-7xl mx-auto">
@@ -54,7 +99,25 @@ export default function AgentsPage() {
             Create New Agent
           </Link>
         </div>
-        <AgentManagement />
+        
+        {agents.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="bg-gray-800/50 rounded-lg p-8">
+              <h3 className="text-xl font-semibold text-gray-300 mb-4">No Agents Found</h3>
+              <p className="text-gray-400 mb-6">
+                You haven&apos;t created any AI trading agents yet. Create your first agent to start autonomous trading.
+              </p>
+              <Link
+                href="/agents/create"
+                className="inline-block px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Create Your First Agent
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <AgentManagement />
+        )}
       </div>
     </main>
   );

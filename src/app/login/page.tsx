@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const router = useRouter();
   const { isConnected, address } = useAccount();
 
@@ -32,12 +34,12 @@ export default function LoginPage() {
         localStorage.setItem('token', data.token);
         router.push('/dashboard');
       } else {
-        alert('Wallet authentication failed. Please try again.');
+        setError(data.error || 'Wallet authentication failed. Please try again.');
       }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Wallet login failed:', error);
-      alert('Wallet authentication failed. Please try again.');
+      setError('An unexpected error occurred during wallet login. Please try again.');
     } finally {
       setIsConnecting(false);
     }
@@ -73,12 +75,12 @@ export default function LoginPage() {
         localStorage.setItem('token', data.token);
         router.push('/dashboard');
       } else {
-        alert('Email authentication failed. Please try again.');
+        setError(data.error || 'Email authentication failed. Please try again.');
       }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Login failed:', error);
-      alert('Login failed. Please try again.');
+      setError('An unexpected error occurred during login. Please try again.');
     } finally {
       setIsConnecting(false);
     }
@@ -88,14 +90,19 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">AV</span>
-            </div>
-          </div>
+          <Link href="/" className="inline-flex items-center justify-center space-x-2 mb-6">
+            <Image src="/icon.svg" alt="AgentVault Logo" width={48} height={48} />
+            <span className="text-3xl font-bold text-white relative top-px">AgentVault</span>
+          </Link>
           <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
           <p className="text-gray-400">Connect your wallet or sign in to continue</p>
         </div>
+
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-center">
+            {error}
+          </div>
+        )}
 
         <div className="crypto-card p-8 space-y-6">
           {/* Wallet Connection via RainbowKit */}
@@ -103,7 +110,7 @@ export default function LoginPage() {
             <ConnectButton showBalance={false} />
           </div>
           <p className="text-xs text-gray-400 mt-2 text-center">
-            CDP Wallet provisioning happens automatically after you connect
+            Your wallet (MetaMask, Coinbase Wallet, WalletConnect, etc.) can be used to sign in. A secure agent wallet is provisioned for you automatically after connecting.
           </p>
 
           <div className="relative">

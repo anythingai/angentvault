@@ -13,31 +13,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
-  const { email, password, name } = req.body;
+  const { email, password, name, walletAddress, method } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ success: false, error: 'Email and password are required' });
+  // Validate input depending on registration method
+  if (method === 'wallet') {
+    if (!walletAddress) {
+      return res.status(400).json({ success: false, error: 'walletAddress is required for wallet registration' });
+    }
+  } else {
+    // Default to email / password registration
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Email and password are required' });
+    }
   }
 
   try {
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    let existingUser;
+
+    if (method === 'wallet') {
+      existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { walletAddress: walletAddress?.toLowerCase() },
+            email ? { email: email.toLowerCase() } : undefined,
+          ].filter(Boolean) as any,
+        },
+      });
+    } else {
+      existingUser = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+      });
+    }
 
     if (existingUser) {
       return res.status(400).json({ success: false, error: 'User already exists' });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
+    let hashedPassword: string | undefined = undefined;
 
-    // Create user first
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, 12);
+    }
+
+    // Create user
     const user = await prisma.user.create({
       data: {
-        email,
+        email: email?.toLowerCase() ?? null,
         passwordHash: hashedPassword,
-        name: name || email.split('@')[0],
+        name: name || (email ? email.split('@')[0] : 'AgentVault User'),
+        walletAddress: walletAddress?.toLowerCase() ?? null,
       },
     });
 
@@ -46,24 +70,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const wallet = await walletService.createWallet(user.id);
 
     // Update user with wallet address
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { walletAddress: wallet.address },
-    });
+    if (!user.walletAddress) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { walletAddress: wallet.address },
+      });
+    }
 
-    // Store wallet data
+    // Determine network (fallback to env or default)
+    const network = (wallet as any).network || process.env.CDP_NETWORK || 'base-sepolia';
+
+    // Store wallet data - use address as walletId if no explicit ID is provided
     await prisma.wallet.create({
       data: {
         userId: user.id,
-        walletId: wallet.id,
-        addresses: JSON.stringify({ [wallet.network]: wallet.address }),
-        network: wallet.network,
+        walletId: (wallet as any).id ?? wallet.address,
+        addresses: JSON.stringify({ [network]: wallet.address }),
+        network,
       },
     });
 
     // Generate token
     const token = jwt.sign(
-      { id: user.id, email: user.email, walletAddress: user.walletAddress },
+      { id: user.id, email: user.email, walletAddress: user.walletAddress ?? wallet.address },
       process.env.JWT_SECRET as string,
       { expiresIn: '7d' }
     );
@@ -75,7 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: user.id,
         email: user.email,
         name: user.name,
-        walletAddress: user.walletAddress,
+        walletAddress: user.walletAddress ?? wallet.address,
       },
     });
   } catch (error: any) {

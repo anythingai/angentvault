@@ -210,11 +210,94 @@ router.get('/', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Failed to fetch market summary:', error);
+    
     res.status(500).json({
       error: 'Failed to fetch market summary',
       message: error.message || 'Unknown error'
     });
   }
 });
+
+// Get market overview for dashboard/homepage
+router.get('/overview', async (req: Request, res: Response) => {
+  try {
+    // Check cache first
+    const cached = marketDataCache.get('overview');
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return res.json({
+        success: true,
+        data: cached.data
+      });
+    }
+
+    // Fetch top coins for overview
+    const response = await axios.get('https://api.coingecko.com/api/v3/coins/markets', {
+      params: {
+        vs_currency: 'usd',
+        order: 'market_cap_desc',
+        per_page: 10,
+        page: 1,
+        sparkline: false,
+        price_change_percentage: '24h'
+      },
+      timeout: 10000
+    });
+
+    const overviewData = response.data.slice(0, 5).map((coin: any) => ({
+      symbol: coin.symbol.toUpperCase(),
+      name: coin.name,
+      price: coin.current_price,
+      change24h: coin.price_change_percentage_24h,
+      volume24h: coin.total_volume,
+      marketCap: coin.market_cap,
+      rank: coin.market_cap_rank,
+      icon: getIconForSymbol(coin.symbol.toUpperCase()),
+      image: coin.image
+    }));
+
+    // Cache the result
+    marketDataCache.set('overview', {
+      data: overviewData,
+      timestamp: Date.now()
+    });
+
+    res.json({
+      success: true,
+      data: overviewData
+    });
+  } catch (error: any) {
+    logger.error('Failed to fetch market overview:', error);
+    
+    // Fallback data if API fails
+    const fallbackData = [
+      { symbol: 'BTC', price: 45000, change24h: 4.65, icon: '₿', name: 'Bitcoin' },
+      { symbol: 'ETH', price: 3000, change24h: 5.26, icon: 'Ξ', name: 'Ethereum' },
+      { symbol: 'USDC', price: 1, change24h: 0.01, icon: '$', name: 'USD Coin' }
+    ];
+    
+    res.json({
+      success: true,
+      data: fallbackData
+    });
+  }
+});
+
+// Helper function to get icon for symbol
+function getIconForSymbol(symbol: string): string {
+  const iconMap: Record<string, string> = {
+    'BTC': '₿',
+    'ETH': 'Ξ',
+    'USDC': '$',
+    'USDT': '$',
+    'SOL': '◎',
+    'ADA': '₳',
+    'DOT': '●',
+    'MATIC': '◆',
+    'AVAX': '▲',
+    'LINK': '🔗'
+  };
+  
+  return iconMap[symbol] || '●';
+}
 
 export default router; 

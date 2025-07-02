@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { setCookie, getCookie, deleteCookie } from 'cookies-next';
 
@@ -12,7 +12,7 @@ export default function useAuth() {
   const { disconnect } = useDisconnect();
 
   useEffect(() => {
-    const token = getCookie(AUTH_TOKEN_KEY);
+    const token = getCookie(AUTH_TOKEN_KEY) || (typeof window !== 'undefined' ? localStorage.getItem('token') : undefined);
     if (token && isConnected) {
       setIsAuthenticated(true);
       // Fetch user data from backend if needed
@@ -21,7 +21,7 @@ export default function useAuth() {
     }
   }, [isConnected]);
 
-  const login = async () => {
+  const login = useCallback(async () => {
     try {
       if (!isConnected) {
         connect({ connector: connectors[0] });
@@ -36,27 +36,48 @@ export default function useAuth() {
 
         if (response.ok) {
           const { token, user } = await response.json();
+          // Persist token for both SSR (cookie) and client-side (localStorage)
           setCookie(AUTH_TOKEN_KEY, token, {
             maxAge: 60 * 60 * 24 * 7, // 1 week
             path: '/',
           });
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('token', token);
+          }
           setIsAuthenticated(true);
           setUser(user);
-        } else {
-          // Login failed - handle error appropriately
+        } else if (response.status === 401 && address) {
+          // Wallet not registered yet – automatically create user
+          const regRes = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ walletAddress: address.toLowerCase(), method: 'wallet' }),
+          });
+          if (regRes.ok) {
+            const { token, user } = await regRes.json();
+            setCookie(AUTH_TOKEN_KEY, token, { maxAge: 60 * 60 * 24 * 7, path: '/' });
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('token', token);
+            }
+            setIsAuthenticated(true);
+            setUser(user);
+          }
         }
       }
     } catch (error) {
       // Login error occurred - handle error appropriately
     }
-  };
+  }, [isConnected, address, connect, connectors]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     disconnect();
     deleteCookie(AUTH_TOKEN_KEY);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+    }
     setIsAuthenticated(false);
     setUser(null);
-  };
+  }, [disconnect]);
 
   return {
     isAuthenticated,

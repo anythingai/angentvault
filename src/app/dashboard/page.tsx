@@ -7,8 +7,12 @@ import PortfolioChart from '../components/PortfolioChart';
 import AgentManagement from '../components/AgentManagement';
 
 interface Alert {
+  id: string;
   type: string;
   message: string;
+  severity: 'info' | 'warning' | 'error' | 'success';
+  createdAt: string;
+  isRead: boolean;
 }
 
 interface Activity {
@@ -85,16 +89,19 @@ export default function Dashboard() {
         })));
       }
 
-      // Fetch alerts from API if implemented, otherwise leave empty
-      setAlerts([]);
-      // TODO: Implement alerts API endpoint
-      // const alertsRes = await fetch('/api/alerts', {
-      //   headers: { Authorization: `Bearer ${token}` },
-      // });
-      // const alertsData = await alertsRes.json();
-      // if (alertsData.alerts) {
-      //   setAlerts(alertsData.alerts);
-      // }
+      // Fetch alerts from API
+      try {
+        const alertsRes = await fetch('/api/alerts', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const alertsData = await alertsRes.json();
+        if (alertsData.success && alertsData.alerts) {
+          setAlerts(alertsData.alerts.filter((alert: any) => !alert.isRead).slice(0, 3)); // Show only unread alerts, max 3
+        }
+             } catch {
+         // If alerts API fails, continue without alerts
+         setAlerts([]);
+       }
 
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -123,7 +130,9 @@ export default function Dashboard() {
             <h3 className="text-gray-400 text-sm font-medium">Total Portfolio Value</h3>
             <p className="text-2xl font-bold mt-2">${stats.totalValue.toFixed(2)}</p>
             <p className={`text-sm mt-1 ${stats.dayChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {stats.dayChange >= 0 ? '+' : ''}{stats.dayChange.toFixed(2)} ({((stats.dayChange / stats.totalValue) * 100).toFixed(2)}%)
+              {stats.dayChange >= 0 ? '+' : ''}{stats.dayChange.toFixed(2)} ({
+                stats.totalValue === 0 ? '0.00' : ((stats.dayChange / stats.totalValue) * 100).toFixed(2)
+              }%)
             </p>
           </div>
           <div className="bg-gray-800 rounded-lg p-6">
@@ -140,17 +149,21 @@ export default function Dashboard() {
             <h3 className="text-gray-400 text-sm font-medium">Active Trades</h3>
             <p className="text-2xl font-bold mt-2">{stats.activeTrades}</p>
           </div>
-                  </div>
+        </div>
 
         {/* Alerts */}
         {alerts.length > 0 && (
           <div className="space-y-3 mb-8">
-            {alerts.map((alert, index) => (
+            {alerts.map((alert) => (
                   <div 
-                key={index}
+                key={alert.id}
                 className={`p-4 rounded-lg ${
-                  alert.type === 'success'
+                  alert.severity === 'success'
                     ? 'bg-green-900/20 border border-green-500/50 text-green-400'
+                    : alert.severity === 'error'
+                    ? 'bg-red-900/20 border border-red-500/50 text-red-400'
+                    : alert.severity === 'warning'
+                    ? 'bg-yellow-900/20 border border-yellow-500/50 text-yellow-400'
                     : 'bg-blue-900/20 border border-blue-500/50 text-blue-400'
                 }`}
               >
@@ -170,9 +183,9 @@ export default function Dashboard() {
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <h2 className="text-xl font-semibold mb-4">Your AI Agents</h2>
           <AgentManagement />
-          </div>
+        </div>
 
-            {/* Recent Activity */}
+        {/* Recent Activity */}
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
           <div className="overflow-x-auto">

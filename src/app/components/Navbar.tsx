@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import useAuth from '../hooks/useAuth';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import Image from 'next/image';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard' },
@@ -17,8 +18,9 @@ const navigation = [
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { login, isConnected } = useAuth();
-  const pathname = usePathname();
+  const { login, isConnected, isAuthenticated } = useAuth();
+  const rawPath = usePathname();
+  const pathname = rawPath || '/';
 
   useEffect(() => {
     if (isConnected) {
@@ -27,11 +29,12 @@ export default function Navbar() {
   }, [isConnected, login]);
 
   return (
-    <header className="bg-gray-900 text-white">
+    <header className="sticky top-0 z-50 bg-gray-900/80 text-white backdrop-blur-md border-b border-purple-500/10">
       <nav className="mx-auto flex max-w-7xl items-center justify-between p-6 lg:px-8" aria-label="Global">
         <div className="flex lg:flex-1">
-          <Link href="/" className="-m-1.5 p-1.5">
-            <span className="text-xl font-bold">AgentVault</span>
+          <Link href="/" className="-m-1.5 p-1.5 flex items-center space-x-2">
+            <Image src="/icon.svg" alt="AgentVault Logo" width={32} height={32} />
+            <span className="text-xl font-bold relative top-px">AgentVault</span>
           </Link>
         </div>
         <div className="flex lg:hidden">
@@ -50,15 +53,36 @@ export default function Navbar() {
               key={item.name} 
               href={item.href} 
               className={`text-sm font-semibold leading-6 ${
-                pathname === item.href ? 'text-purple-400' : ''
+                (item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)) ? 'text-purple-400' : ''
               }`}
             >
               {item.name}
             </Link>
           ))}
         </div>
-        <div className="hidden lg:flex lg:flex-1 lg:justify-end">
-          <ConnectButton />
+        <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4">
+          {!isAuthenticated ? (
+            <>
+              <Link
+                href="/login"
+                className={`text-sm font-semibold leading-6 ${
+                  pathname === '/login' ? 'text-purple-400' : 'hover:text-purple-400'
+                }`}
+              >
+                Login
+              </Link>
+              <Link
+                href="/register"
+                className={`text-sm font-semibold leading-6 ${
+                  pathname === '/register' ? 'text-purple-400' : 'hover:text-purple-400'
+                }`}
+              >
+                Register
+              </Link>
+            </>
+          ) : (
+            <ConnectButton />
+          )}
         </div>
       </nav>
       {/* Mobile menu */}
@@ -66,8 +90,9 @@ export default function Navbar() {
         <div className="fixed inset-0 z-10" />
         <div className="fixed inset-y-0 right-0 z-10 w-full overflow-y-auto bg-gray-900 px-6 py-6 sm:max-w-sm sm:ring-1 sm:ring-white/10">
           <div className="flex items-center justify-between">
-            <Link href="/" className="-m-1.5 p-1.5">
-              <span className="text-xl font-bold">AgentVault</span>
+            <Link href="/" className="-m-1.5 p-1.5 flex items-center space-x-2">
+              <Image src="/icon.svg" alt="AgentVault Logo" width={32} height={32} />
+              <span className="text-xl font-bold relative top-px">AgentVault</span>
             </Link>
             <button
               type="button"
@@ -92,7 +117,24 @@ export default function Navbar() {
                 ))}
               </div>
               <div className="py-6">
-                <ConnectButton />
+                {!isAuthenticated ? (
+                  <div className="space-y-2">
+                    <Link
+                      href="/login"
+                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 hover:bg-gray-800"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href="/register"
+                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 hover:bg-gray-800"
+                    >
+                      Register
+                    </Link>
+                  </div>
+                ) : (
+                  <ConnectButton />
+                )}
               </div>
             </div>
           </div>

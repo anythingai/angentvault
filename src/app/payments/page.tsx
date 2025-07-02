@@ -100,7 +100,7 @@ export default function PaymentsPage() {
             {
               id: 'primary-wallet',
               type: 'wallet',
-              name: 'CDP Wallet',
+              name: 'Wallet (MetaMask, Coinbase, etc.)',
               address: walletData.data.address,
               isDefault: true
             }

@@ -1,6 +1,6 @@
 const { exec } = require('child_process');
 
-// console.log('🚀 Starting AgentVault - Coinbase Agents in Action Hackathon Project');
+// console.log('🚀 Starting AgentVault - Autonomous AI Trading Platform');
 // console.log('========================================================================');
 
 // Start the Next.js frontend
@@ -29,6 +29,6 @@ setTimeout(() => {
   // console.log('  - Coinbase CDP Wallet Management');
   // console.log('  - Akash Network Compute');
   // console.log('  - Pinata IPFS Storage');
-  // console.log('\n🏆 Built for Coinbase Agents in Action Hackathon 2024');
+  // console.log('\n🏆 Production-ready autonomous crypto trading platform');
   // console.log('========================================================================');
 }, 3000); 

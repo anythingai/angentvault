@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from './components/Navbar'
+import Footer from './components/Footer'
 import dynamic from 'next/dynamic'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -14,6 +15,11 @@ export const metadata: Metadata = {
   description: 'AI-powered autonomous crypto investment platform with advanced agent technology',
   keywords: ['crypto', 'AI', 'autonomous', 'investment', 'DeFi', 'blockchain', 'x402pay', 'CDP', 'Bedrock', 'Akash'],
   authors: [{ name: 'AgentVault Team' }],
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
   openGraph: {
     title: 'AgentVault - Autonomous Crypto Investment Platform',
     description: 'AI-powered autonomous cryptocurrency investment agents',
@@ -45,6 +51,7 @@ export default function RootLayout({
         <main className="min-h-screen">
         {children}
         </main>
+        <Footer />
         </WalletProvider>
       </body>
     </html>
