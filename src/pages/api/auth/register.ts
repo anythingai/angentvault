@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { generateToken } from '../../../server/middleware/auth';
 import { CDPWalletService } from '../../../server/services/CDPWalletService';
 
 const globalForPrisma = global as unknown as { prisma?: PrismaClient };
@@ -90,12 +90,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    // Generate token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, walletAddress: user.walletAddress ?? wallet.address },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '7d' }
-    );
+    // Generate token using shared utility for consistency
+    const token = generateToken({
+      id: user.id,
+      email: user.email ?? '',
+      walletAddress: (user.walletAddress ?? wallet.address) as string,
+    });
 
     return res.status(201).json({
       success: true,

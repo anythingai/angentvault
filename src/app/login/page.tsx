@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import Image from 'next/image';
+import { setCookie } from 'cookies-next';
 
 export default function LoginPage() {
   const [isConnecting, setIsConnecting] = useState(false);
@@ -31,7 +31,12 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.success) {
+        // Persist token in both localStorage (client) and cookie (SSR / API)
         localStorage.setItem('token', data.token);
+        setCookie('auth-token', data.token, {
+          maxAge: 60 * 60 * 24 * 7, // 1 week
+          path: '/',
+        });
         router.push('/dashboard');
       } else {
         setError(data.error || 'Wallet authentication failed. Please try again.');
@@ -72,7 +77,12 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.success) {
+        // Persist token in both localStorage (client) and cookie (SSR / API)
         localStorage.setItem('token', data.token);
+        setCookie('auth-token', data.token, {
+          maxAge: 60 * 60 * 24 * 7, // 1 week
+          path: '/',
+        });
         router.push('/dashboard');
       } else {
         setError(data.error || 'Email authentication failed. Please try again.');
@@ -87,13 +97,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <Link href="/" className="inline-flex items-center justify-center space-x-2 mb-6">
-            <Image src="/icon.svg" alt="AgentVault Logo" width={48} height={48} />
-            <span className="text-3xl font-bold text-white relative top-px">AgentVault</span>
-          </Link>
           <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
           <p className="text-gray-400">Connect your wallet or sign in to continue</p>
         </div>

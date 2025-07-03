@@ -457,6 +457,110 @@
   }
 }
 
+/* Gradient blob animations */
+@keyframes pulse-slow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.4;
+  }
+}
+
+@keyframes pulse-slower {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.35;
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes float-reverse {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(20px);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s infinite ease-in-out;
+}
+
+.animate-pulse-slower {
+  animation: pulse-slower 5s infinite ease-in-out;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 10s linear infinite;
+}
+
+.animate-float {
+  animation: float 3s infinite ease-in-out;
+}
+
+.animate-float-reverse {
+  animation: float-reverse 3.5s infinite ease-in-out;
+}
+
+@keyframes blob-move {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+  25% { transform: translate(20px, -30px) scale(1.1); opacity: 0.4; }
+  50% { transform: translate(-20px, 20px) scale(0.9); opacity: 0.2; }
+  75% { transform: translate(30px, 30px) scale(1.2); opacity: 0.5; }
+  100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+}
+
+@keyframes blob-blast {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(5); opacity: 0; }
+}
+
+.animate-blob-move {
+  animation: blob-move 5s ease-in-out infinite;
+}
+
+.animate-blob-blast {
+  animation: blob-blast 0.7s ease-out forwards;
+}
+
+.animation-delay-1s {
+  animation-delay: 1s;
+}
+.animation-delay-2s {
+  animation-delay: 2s;
+}
+.animation-delay-3s {
+  animation-delay: 3s;
+}
+.animation-delay-4s {
+  animation-delay: 4s;
+}
+
 /* Loading skeleton improvements */
 .skeleton {
   @apply bg-gray-700 animate-pulse rounded-lg;

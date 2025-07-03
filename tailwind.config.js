@@ -43,8 +43,21 @@ module.exports = {
         'fade-in': 'fadeIn 0.5s ease-in-out',
         'slide-up': 'slideUp 0.3s ease-out',
         'pulse-crypto': 'pulseCrypto 2s infinite',
+        'blob-move': 'blob-move 10s ease-in-out infinite',
+        'blob-blast': 'blob-blast 1s ease-out forwards',
       },
       keyframes: {
+        'blob-move': {
+          '0%': { transform: 'translate(0, 0) scale(1)', opacity: '0.3' },
+          '25%': { transform: 'translate(20px, -30px) scale(1.1)', opacity: '0.4' },
+          '50%': { transform: 'translate(-20px, 20px) scale(0.9)', opacity: '0.2' },
+          '75%': { transform: 'translate(30px, 30px) scale(1.2)', opacity: '0.5' },
+          '100%': { transform: 'translate(0, 0) scale(1)', opacity: '0.3' },
+        },
+        'blob-blast': {
+          '0%': { transform: 'scale(1)', opacity: '0.5' },
+          '100%': { transform: 'scale(5)', opacity: '0' },
+        },
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },

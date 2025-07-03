@@ -30,7 +30,7 @@ export default function AgentsPage() {
     setError(null);
     
     try {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('token') || localStorage.getItem('authToken');
       const response = await fetch('/api/agents', {
         headers: {
           'Authorization': token ? `Bearer ${token}` : '',

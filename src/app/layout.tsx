@@ -45,13 +45,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900`}>
+      <head>
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+      </head>
+      <body className={`${inter.className} bg-gray-900 font-sans overflow-x-hidden`}>
         <WalletProvider>
-        <Navbar />
-        <main className="min-h-screen">
-        {children}
-        </main>
-        <Footer />
+          <div className="min-h-screen bg-gradient-to-br from-indigo-900 to-purple-900 text-white">
+            <Navbar />
+            {children}
+          </div>
+          <Footer />
         </WalletProvider>
       </body>
     </html>

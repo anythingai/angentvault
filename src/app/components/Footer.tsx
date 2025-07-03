@@ -4,8 +4,8 @@ import { FaTwitter, FaGithub, FaDiscord } from 'react-icons/fa';
 export default function Footer() {
   return (
     <footer className="bg-slate-900 border-t border-purple-500/10 pt-16 pb-8 text-gray-400">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8 mb-12">
+      <div className="max-w-7xl mx-auto px-6 flex flex-col items-center">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8 mb-12 w-full justify-items-center">
           {/* Column 1: Brand */}
           <div className="col-span-2">
             <h3 className="text-xl font-bold text-white mb-2">AgentVault</h3>
@@ -62,9 +62,8 @@ export default function Footer() {
         
         <hr className="border-gray-800 my-8" />
 
-        <div className="flex flex-col sm:flex-row justify-between items-center text-sm">
+        <div className="flex flex-col sm:flex-row justify-center items-center text-sm w-full text-center">
           <p>&copy; {new Date().getFullYear()} AgentVault. All rights reserved.</p>
-          <p className="mt-4 sm:mt-0">Built for the Coinbase Agents in Action Hackathon.</p>
         </div>
       </div>
     </footer>
