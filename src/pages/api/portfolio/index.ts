@@ -136,9 +136,7 @@ export default async function handler(
     res.status(500).json({
       success: false,
       error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' 
-        ? (error instanceof Error ? error.message : 'Unknown error')
-        : 'Failed to fetch portfolio data',
+                      message: error instanceof Error ? error.message : 'Failed to fetch portfolio data',
     });
   }
 } 

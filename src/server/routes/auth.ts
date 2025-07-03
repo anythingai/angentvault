@@ -61,26 +61,28 @@ router.post('/register', async (req, res) => {
 
     // Create CDP wallet for the user
     let walletAddress = '';
-    let tempUser: any = null;
     try {
-      // Create user first to get userId
-      tempUser = await prisma.user.create({
-        data: {
-          email,
-          passwordHash: hashedPassword,
-          name,
-          subscription: 'basic',
-        },
-      });
+      // Create user with wallet in a transaction
+      const user = await prisma.$transaction(async (tx) => {
+        // Create user first
+        const newUser = await tx.user.create({
+          data: {
+            email,
+            passwordHash: hashedPassword,
+            name,
+            subscription: 'basic',
+          },
+        });
 
-      // Create CDP wallet
-      const wallet = await cdpWalletService.createWallet(tempUser.id);
-      walletAddress = wallet.addresses?.[0]?.id || wallet.id;
+        // Create CDP wallet
+        const wallet = await cdpWalletService.createWallet(newUser.id);
+        walletAddress = wallet.addresses?.[0]?.id || wallet.id;
 
-      // Update user with wallet address
-      const user = await prisma.user.update({
-        where: { id: tempUser.id },
-        data: { walletAddress },
+        // Update user with wallet address
+        return await tx.user.update({
+          where: { id: newUser.id },
+          data: { walletAddress },
+        });
       });
 
       // Generate JWT token
@@ -116,10 +118,8 @@ router.post('/register', async (req, res) => {
         },
       });
     } catch (walletError) {
-      // Clean up user if wallet creation failed
-      if (tempUser) {
-        await prisma.user.delete({ where: { id: tempUser.id } });
-      }
+      // Transaction will automatically rollback if wallet creation failed
+      logger.error('User registration failed during wallet creation:', walletError);
       throw walletError;
     }
   } catch (error) {

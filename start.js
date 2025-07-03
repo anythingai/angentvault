@@ -4,7 +4,7 @@ const { exec } = require('child_process');
 // console.log('========================================================================');
 
 // Start the Next.js frontend
-// console.log('📦 Starting Next.js Frontend on http://localhost:3000...');
+// console.log('📦 Starting Next.js Frontend...');
 const frontend = exec('npm run dev', { cwd: __dirname });
 
 frontend.stdout.on('data', (data) => {
@@ -22,7 +22,7 @@ frontend.on('close', (_code) => {
 // Wait a bit then show status
 setTimeout(() => {
   // console.log('\n🌟 AgentVault is starting up!');
-  // console.log('\n📊 Dashboard: http://localhost:3000');
+  // console.log('\n📊 Dashboard ready');
   // console.log('⚡ Features:');
   // console.log('  - Amazon Bedrock Nova AI Integration');
   // console.log('  - x402pay Micropayments');

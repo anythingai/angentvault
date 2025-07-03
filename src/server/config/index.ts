@@ -39,12 +39,12 @@ validateRequiredEnvVars();
 export const config: AppConfig = {
   server: {
     port: parseInt(process.env.PORT || '4000'),
-    environment: process.env.NODE_ENV || 'development',
-    apiUrl: process.env.API_URL || 'http://localhost:4000',
-    clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
+    environment: process.env.NODE_ENV || 'production',
+    apiUrl: process.env.API_URL || 'https://agentvault.akash.network',
+    clientUrl: process.env.CLIENT_URL || 'https://agentvault.akash.network',
   },
   database: {
-    url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/agentvault',
+    url: process.env.DATABASE_URL || '',
     maxConnections: parseInt(process.env.DB_MAX_CONNECTIONS || '10'),
     ssl: process.env.NODE_ENV === 'production',
   },
@@ -102,7 +102,7 @@ export const config: AppConfig = {
       }
       return 'dev-encryption-key-not-for-production';
     })(),
-    corsOrigin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+    corsOrigin: process.env.ALLOWED_ORIGINS?.split(',') || ['https://agentvault.akash.network'],
     rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
     rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
   },

@@ -67,10 +67,14 @@ export default function Dashboard() {
       const tradesData = await tradesRes.json();
 
       // Update state with real data
-      if (portfolioData.portfolio) {
-        setPortfolio(portfolioData.portfolio);
-        const totalValue = portfolioData.portfolio.reduce((sum: number, p: any) => sum + p.balanceUSD, 0);
-        const dayChange = portfolioData.portfolio.reduce((sum: number, p: any) => sum + (p.profitLoss || 0), 0);
+      if (portfolioData.success && portfolioData.data) {
+        // Use externalData for the actual portfolio assets array
+        setPortfolio(portfolioData.data.externalData || []);
+        
+        // Use the calculated totalValue from the API
+        const totalValue = portfolioData.data.portfolio.totalValue;
+        // Use the calculated totalReturn as dayChange
+        const dayChange = portfolioData.data.performance.totalReturn || 0;
         
         setStats({
           totalValue,

@@ -24,7 +24,7 @@ const nextConfig = {
   
   // Image optimization
   images: {
-    domains: ['localhost', 'cdn.coinbase.com', 'assets.coingecko.com'],
+            domains: ['agentvault.akash.network', 'cdn.coinbase.com', 'assets.coingecko.com'],
   },
   
   // Webpack configuration

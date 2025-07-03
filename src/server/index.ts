@@ -174,9 +174,9 @@ async function startServer() {
   // Start the server
   const PORT = config.server.port;
   httpServer.listen(PORT, () => {
-    logger.info(`🚀 Server running on http://localhost:${PORT}`);
-    logger.info(`📊 GraphQL endpoint: http://localhost:${PORT}/graphql`);
-    logger.info(`🔌 WebSocket endpoint: ws://localhost:${PORT}`);
+      logger.info(`🚀 Server running on port ${PORT}`);
+  logger.info(`📊 GraphQL endpoint: /graphql`);
+  logger.info(`🔌 WebSocket endpoint: /ws`);
     logger.info(`💾 Database: Connected`);
     logger.info(`🎯 Environment: ${process.env.NODE_ENV}`);
   });

@@ -97,7 +97,7 @@ export default function AgentManagement() {
 
   useEffect(() => {
     const connectWebSocket = () => {
-      const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:4000';
+      const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'wss://agentvault.akash.network';
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {

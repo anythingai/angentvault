@@ -8,7 +8,7 @@ declare global {
   var __prisma: PrismaClient | undefined;
 }
 
-const logLevels = (process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']) as any;
+const logLevels = ['error'] as any;
 
 if (process.env.NODE_ENV === 'production') {
   prisma = new PrismaClient();

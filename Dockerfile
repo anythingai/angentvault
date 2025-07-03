@@ -24,7 +24,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Set environment variables for Prisma during build
-ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/agentvault"
+# Database URL will be provided via environment variable
 
 # Generate Prisma client
 RUN npx prisma generate

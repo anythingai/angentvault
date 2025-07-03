@@ -42,11 +42,11 @@ services:
       - PINATA_GATEWAY_URL=https://gateway.pinata.cloud
       
       # Security configuration
-      - JWT_SECRET=${JWT_SECRET:-hackathon-demo-secret-change-in-production}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-demo-encryption-key}
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       
-      # Feature flags for hackathon demo
-      - ENABLE_DEMO_MODE=false
+      # Production feature flags
+- ENABLE_REAL_TRADING=true
       - ENABLE_PAPER_TRADING=true
       - ENABLE_REAL_TRADING=true
       - ENABLE_WEBSOCKET=true

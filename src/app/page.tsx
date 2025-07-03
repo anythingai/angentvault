@@ -132,28 +132,16 @@ export default function AgentVaultHome() {
       // Handle market data
       if (marketResponse) {
         const marketData = await marketResponse.json();
-        setMarketData(marketData.data || [
-          { symbol: 'BTC', price: 45000, change24h: 4.65, icon: '₿' },
-          { symbol: 'ETH', price: 3000, change24h: 5.26, icon: 'Ξ' },
-          { symbol: 'USDC', price: 1, change24h: 0.01, icon: '$' }
-        ]);
+        setMarketData(marketData.data || []);
       } else {
-        // Fallback to default market data
-        setMarketData([
-          { symbol: 'BTC', price: 45000, change24h: 4.65, icon: '₿' },
-          { symbol: 'ETH', price: 3000, change24h: 5.26, icon: 'Ξ' },
-          { symbol: 'USDC', price: 1, change24h: 0.01, icon: '$' }
-        ]);
+        // No fallback data - show empty state instead of fake data
+        setMarketData([]);
       }
     } catch (error) {
       // Log error for debugging without using console
       
-      // Fallback to empty/default state on error
-      setMarketData([
-        { symbol: 'BTC', price: 0, change24h: 0, icon: '₿' },
-        { symbol: 'ETH', price: 0, change24h: 0, icon: 'Ξ' },
-        { symbol: 'USDC', price: 1, change24h: 0, icon: '$' }
-      ]);
+      // No fallback data - show empty state instead of fake data
+      setMarketData([]);
     } finally {
       setIsLoaded(true);
     }

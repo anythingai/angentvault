@@ -9,6 +9,29 @@ interface AnalyticsData {
   bestStrategy: string;
   totalVolume: number;
   activeAgents: number;
+  performanceMetrics: {
+    sharpeRatio: number;
+    maxDrawdown: number;
+    alpha: number;
+    beta: number;
+    volatility: number;
+    calmarRatio: number;
+  };
+  strategyPerformance: Array<{
+    name: string;
+    return: number;
+    trades: number;
+    winRate: number;
+  }>;
+  riskDistribution: Array<{
+    level: string;
+    percentage: number;
+  }>;
+  tradingActivity: Array<{
+    date: string;
+    trades: number;
+    volume: number;
+  }>;
 }
 
 interface PerformanceMetric {
@@ -60,21 +83,104 @@ export default function AnalyticsPage() {
         avgReturn: 0,
         bestStrategy: 'No data',
         totalVolume: 0,
-        activeAgents: 0
+        activeAgents: 0,
+        performanceMetrics: {
+          sharpeRatio: 0,
+          maxDrawdown: 0,
+          alpha: 0,
+          beta: 1,
+          volatility: 0,
+          calmarRatio: 0,
+        },
+        strategyPerformance: [],
+        riskDistribution: [
+          { level: 'Low Risk', percentage: 0 },
+          { level: 'Medium Risk', percentage: 0 },
+          { level: 'High Risk', percentage: 0 },
+        ],
+        tradingActivity: [],
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const performanceMetrics: PerformanceMetric[] = [
-    { label: 'Sharpe Ratio', value: '2.34', change: 8.2, trend: 'up' },
-    { label: 'Max Drawdown', value: '12.4%', change: -2.1, trend: 'down' },
-    { label: 'Alpha', value: '0.85', change: 15.3, trend: 'up' },
-    { label: 'Beta', value: '1.12', change: 3.7, trend: 'up' },
-    { label: 'Volatility', value: '18.7%', change: -5.2, trend: 'down' },
-    { label: 'Calmar Ratio', value: '1.89', change: 12.1, trend: 'up' },
-  ];
+  // Convert API performance metrics to display format
+  const getPerformanceMetrics = (): PerformanceMetric[] => {
+    if (!analytics?.performanceMetrics) return [];
+    
+    const metrics = analytics.performanceMetrics;
+    return [
+      { 
+        label: 'Sharpe Ratio', 
+        value: metrics.sharpeRatio.toFixed(2), 
+        change: 0, // Would need historical data for real change
+        trend: metrics.sharpeRatio > 1 ? 'up' : metrics.sharpeRatio > 0.5 ? 'neutral' : 'down' 
+      },
+      { 
+        label: 'Max Drawdown', 
+        value: `${metrics.maxDrawdown.toFixed(1)}%`, 
+        change: 0, // Max drawdown change not meaningful without context
+        trend: 'neutral' 
+      },
+      { 
+        label: 'Alpha', 
+        value: metrics.alpha.toFixed(2), 
+        change: 0, // Would need historical data for real change
+        trend: metrics.alpha > 0 ? 'up' : metrics.alpha > -0.02 ? 'neutral' : 'down' 
+      },
+      { 
+        label: 'Beta', 
+        value: metrics.beta.toFixed(2), 
+        change: 0, // Would need historical data for real change
+        trend: Math.abs(metrics.beta - 1) < 0.2 ? 'neutral' : metrics.beta > 1 ? 'up' : 'down' 
+      },
+      { 
+        label: 'Volatility', 
+        value: `${metrics.volatility.toFixed(1)}%`, 
+        change: 0, // Would need historical data for real change
+        trend: metrics.volatility < 15 ? 'up' : metrics.volatility < 25 ? 'neutral' : 'down' 
+      },
+      { 
+        label: 'Calmar Ratio', 
+        value: metrics.calmarRatio.toFixed(2), 
+        change: 0, // Would need historical data for real change
+        trend: metrics.calmarRatio > 1 ? 'up' : metrics.calmarRatio > 0.5 ? 'neutral' : 'down' 
+      },
+    ];
+  };
+
+  // Generate heatmap data from real trading activity
+  const generateHeatmapData = () => {
+    if (!analytics?.tradingActivity || analytics.tradingActivity.length === 0) {
+      // Return empty heatmap if no data
+      return Array.from({ length: 35 }, () => 0);
+    }
+
+    // Create a map of dates to trade counts
+    const activityMap = new Map<string, number>();
+    analytics.tradingActivity.forEach(activity => {
+      activityMap.set(activity.date, activity.trades);
+    });
+
+    // Generate last 35 days of data
+    const heatmapData: number[] = [];
+    const today = new Date();
+    
+    for (let i = 34; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const trades = activityMap.get(dateStr) || 0;
+      heatmapData.push(trades);
+    }
+    
+    return heatmapData;
+  };
+
+  const performanceMetrics = getPerformanceMetrics();
+  const heatmapData = generateHeatmapData();
+  const maxTrades = Math.max(...heatmapData, 1); // Avoid division by zero
 
   if (isLoading) {
     return (
@@ -127,7 +233,9 @@ export default function AnalyticsPage() {
               <span className="text-2xl">📊</span>
             </div>
             <p className="text-2xl font-bold text-white">{analytics.totalTrades.toLocaleString()}</p>
-            <p className="text-sm text-green-400">+127 this month</p>
+            <p className="text-sm text-green-400">
+              {analytics.totalTrades > 0 ? `${analytics.totalTrades} in selected period` : 'No trades yet'}
+            </p>
           </div>
 
           <div className="metric-card">
@@ -136,7 +244,9 @@ export default function AnalyticsPage() {
               <span className="text-2xl">🎯</span>
             </div>
             <p className="text-2xl font-bold text-white">{analytics.winRate}%</p>
-            <p className="text-sm text-green-400">+2.1% vs last month</p>
+            <p className="text-sm text-green-400">
+              {analytics.winRate > 50 ? '+' : ''}{(analytics.winRate - 50).toFixed(1)}% vs average
+            </p>
           </div>
 
           <div className="metric-card">
@@ -145,7 +255,9 @@ export default function AnalyticsPage() {
               <span className="text-2xl">💰</span>
             </div>
             <p className="text-2xl font-bold text-white">{analytics.avgReturn}%</p>
-            <p className="text-sm text-green-400">+1.4% vs benchmark</p>
+            <p className={`text-sm ${analytics.avgReturn > 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {analytics.avgReturn > 0 ? '+' : ''}{analytics.avgReturn.toFixed(1)}% vs benchmark
+            </p>
           </div>
         </div>
       )}
@@ -165,9 +277,11 @@ export default function AnalyticsPage() {
                   metric.trend === 'up' ? 'text-green-400' : 
                   metric.trend === 'down' ? 'text-red-400' : 'text-gray-400'
                 }`}>
-                  <span className="text-sm font-medium">
-                    {metric.change > 0 ? '+' : ''}{metric.change}%
-                  </span>
+                  {metric.change !== 0 && (
+                    <span className="text-sm font-medium">
+                      {metric.change > 0 ? '+' : ''}{metric.change.toFixed(1)}%
+                    </span>
+                  )}
                   <svg 
                     className={`w-4 h-4 ${metric.trend === 'up' ? 'rotate-0' : metric.trend === 'down' ? 'rotate-180' : 'hidden'}`} 
                     fill="currentColor" 
@@ -187,29 +301,32 @@ export default function AnalyticsPage() {
         <div className="crypto-card p-6">
           <h2 className="text-xl font-bold text-white mb-6">Strategy Performance</h2>
           <div className="space-y-4">
-            {[
-              { name: 'DeFi Yield Farming', return: 18.7, trades: 423, winRate: 81.2 },
-              { name: 'Momentum Trading', return: 12.3, trades: 287, winRate: 68.5 },
-              { name: 'Mean Reversion', return: 9.8, trades: 341, winRate: 74.8 },
-              { name: 'Arbitrage', return: 6.2, trades: 196, winRate: 89.3 },
-            ].map((strategy) => (
-              <div key={strategy.name} className="glass-card p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="font-semibold text-white">{strategy.name}</h3>
-                  <span className="text-green-400 font-bold">+{strategy.return}%</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-400">Trades: </span>
-                    <span className="text-white">{strategy.trades}</span>
+            {analytics?.strategyPerformance && analytics.strategyPerformance.length > 0 ? (
+              analytics.strategyPerformance.map((strategy) => (
+                <div key={strategy.name} className="glass-card p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-white">{strategy.name}</h3>
+                    <span className={`font-bold ${strategy.return >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {strategy.return >= 0 ? '+' : ''}{strategy.return.toFixed(1)}%
+                    </span>
                   </div>
-                  <div>
-                    <span className="text-gray-400">Win Rate: </span>
-                    <span className="text-white">{strategy.winRate}%</span>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-400">Trades: </span>
+                      <span className="text-white">{strategy.trades}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Win Rate: </span>
+                      <span className="text-white">{strategy.winRate.toFixed(1)}%</span>
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="glass-card p-4">
+                <p className="text-gray-400 text-center">No strategy data available</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -219,23 +336,41 @@ export default function AnalyticsPage() {
             <div className="glass-card p-4">
               <h3 className="font-semibold text-white mb-3">Risk Distribution</h3>
               <div className="space-y-2">
-                {[
-                  { level: 'Low Risk', percentage: 35, color: 'bg-green-500' },
-                  { level: 'Medium Risk', percentage: 45, color: 'bg-yellow-500' },
-                  { level: 'High Risk', percentage: 20, color: 'bg-red-500' },
-                ].map((risk) => (
-                  <div key={risk.level} className="flex items-center justify-between">
-                    <span className="text-gray-400 text-sm">{risk.level}</span>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-24 bg-gray-700 rounded-full h-2">
-                        <div 
-                          className={`${risk.color} h-2 rounded-full w-[${risk.percentage}%]`}
-                        ></div>
+                {analytics?.riskDistribution.map((risk) => {
+                  // Convert percentage to Tailwind width class
+                  const getWidthClass = (percentage: number) => {
+                    if (percentage === 0) return 'w-0';
+                    if (percentage <= 10) return 'w-1/12';
+                    if (percentage <= 20) return 'w-1/5';
+                    if (percentage <= 25) return 'w-1/4';
+                    if (percentage <= 33) return 'w-1/3';
+                    if (percentage <= 40) return 'w-2/5';
+                    if (percentage <= 50) return 'w-1/2';
+                    if (percentage <= 60) return 'w-3/5';
+                    if (percentage <= 66) return 'w-2/3';
+                    if (percentage <= 75) return 'w-3/4';
+                    if (percentage <= 80) return 'w-4/5';
+                    if (percentage <= 90) return 'w-11/12';
+                    return 'w-full';
+                  };
+
+                  return (
+                    <div key={risk.level} className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">{risk.level}</span>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-24 bg-gray-700 rounded-full h-2 relative">
+                          <div 
+                            className={`h-2 rounded-full transition-all duration-300 ${getWidthClass(risk.percentage)} ${
+                              risk.level === 'Low Risk' ? 'bg-green-500' :
+                              risk.level === 'Medium Risk' ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                          ></div>
+                        </div>
+                        <span className="text-white text-sm w-8">{risk.percentage}%</span>
                       </div>
-                      <span className="text-white text-sm w-8">{risk.percentage}%</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             
@@ -244,15 +379,25 @@ export default function AnalyticsPage() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-400 text-sm">Value at Risk (VaR)</span>
-                  <span className="text-white text-sm">-8.4%</span>
+                  <span className="text-white text-sm">
+                    -{analytics?.performanceMetrics.maxDrawdown.toFixed(1)}%
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400 text-sm">Expected Shortfall</span>
-                  <span className="text-white text-sm">-12.7%</span>
+                  <span className="text-white text-sm">
+                    -{(analytics?.performanceMetrics.maxDrawdown || 0 * 1.5).toFixed(1)}%
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400 text-sm">Risk Score</span>
-                  <span className="text-yellow-400 text-sm font-medium">Medium</span>
+                  <span className={`text-sm font-medium ${
+                    (analytics?.performanceMetrics.volatility || 0) < 15 ? 'text-green-400' :
+                    (analytics?.performanceMetrics.volatility || 0) < 25 ? 'text-yellow-400' : 'text-red-400'
+                  }`}>
+                    {(analytics?.performanceMetrics.volatility || 0) < 15 ? 'Low' :
+                     (analytics?.performanceMetrics.volatility || 0) < 25 ? 'Medium' : 'High'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -269,18 +414,18 @@ export default function AnalyticsPage() {
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: 35 }, (_, i) => {
-            const intensity = Math.random();
+          {heatmapData.map((trades, i) => {
+            const intensity = maxTrades > 0 ? trades / maxTrades : 0;
             return (
               <div
                 key={i}
                 className={`aspect-square rounded-sm ${
                   intensity > 0.7 ? 'bg-purple-500' :
                   intensity > 0.4 ? 'bg-purple-600/70' :
-                  intensity > 0.2 ? 'bg-purple-700/50' :
+                  intensity > 0.1 ? 'bg-purple-700/50' :
                   'bg-gray-800'
                 }`}
-                title={`${Math.floor(intensity * 50)} trades`}
+                title={`${trades} trades`}
               />
             );
           })}

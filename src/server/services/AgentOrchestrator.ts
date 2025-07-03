@@ -5,6 +5,8 @@ import { CDPWalletService } from './CDPWalletService';
 import { X402PayService } from './X402PayService';
 import { PinataService } from './PinataService';
 import { MarketDataService } from './MarketDataService';
+import LangChainService from './LangChainService';
+// import agentKitService from './AgentKitService';
 import { config } from '../config';
 import { agentTradeCounter } from '../metrics';
 import { TradeType, AgentConfig, Trade } from '../../types';
@@ -47,6 +49,7 @@ export class AgentOrchestrator {
   private paymentService: X402PayService;
   private pinataService: PinataService;
   private marketDataService: MarketDataService;
+  private langChainService: LangChainService;
   private websocketHandler: WebSocketHandler;
   private activeAgents: Map<string, AgentConfig> = new Map();
   private executionTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -60,9 +63,10 @@ export class AgentOrchestrator {
     this.paymentService = new X402PayService();
     this.pinataService = new PinataService();
     this.marketDataService = new MarketDataService();
+    this.langChainService = new LangChainService();
     this.websocketHandler = websocketHandler;
 
-    logger.info('AgentOrchestrator initialized');
+    logger.info('AgentOrchestrator initialized with LangChain integration');
   }
 
   async initialize(): Promise<void> {
@@ -247,21 +251,48 @@ export class AgentOrchestrator {
   private async performComprehensiveAnalysis(agent: any, marketData: any): Promise<any> {
     const symbol = agent.strategy.primarySymbol || 'BTC';
     
-    // Perform multiple types of analysis
-    const [sentiment, prediction, risk, opportunities] = await Promise.all([
-      this.bedrockService.analyzeMarketSentiment(marketData),
-      this.bedrockService.predictPrice(symbol, this.formatHistoricalData(marketData), '1H'),
-      this.bedrockService.assessRisk(agent.portfolio || {}, marketData),
-      this.bedrockService.detectOpportunities([marketData], agent.strategy.strategies || ['momentum'])
-    ]);
+    try {
+      // Use LangChain for more sophisticated analysis
+      const langChainAnalysis = await this.langChainService.analyzeMarketWithLangChain(
+        symbol,
+        marketData
+      );
 
-    return {
-      sentiment,
-      prediction,
-      risk,
-      opportunities,
-      timestamp: new Date()
-    };
+      // Perform additional Bedrock analysis for comprehensive coverage
+      const [sentiment, prediction, risk, opportunities] = await Promise.all([
+        this.bedrockService.analyzeMarketSentiment(marketData),
+        this.bedrockService.predictPrice(symbol, this.formatHistoricalData(marketData), '1H'),
+        this.bedrockService.assessRisk(agent.portfolio || {}, marketData),
+        this.bedrockService.detectOpportunities([marketData], agent.strategy.strategies || ['momentum'])
+      ]);
+
+      return {
+        langChainAnalysis,
+        sentiment,
+        prediction,
+        risk,
+        opportunities,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      logger.error('Failed to perform comprehensive analysis:', error);
+      // Fallback to Bedrock-only analysis
+      const [sentiment, prediction, risk, opportunities] = await Promise.all([
+        this.bedrockService.analyzeMarketSentiment(marketData),
+        this.bedrockService.predictPrice(symbol, this.formatHistoricalData(marketData), '1H'),
+        this.bedrockService.assessRisk(agent.portfolio || {}, marketData),
+        this.bedrockService.detectOpportunities([marketData], agent.strategy.strategies || ['momentum'])
+      ]);
+
+      return {
+        sentiment,
+        prediction,
+        risk,
+        opportunities,
+        timestamp: new Date(),
+        error: 'LangChain analysis failed, using Bedrock fallback'
+      };
+    }
   }
 
   private async makeInformedTradeDecision(agent: any, analysis: any, marketData: any): Promise<any> {

@@ -48,13 +48,13 @@ jobs:
       run: npm test
       env:
         CI: true
-        ENABLE_DEMO_MODE: true
+        ENABLE_REAL_TRADING: true
 
     - name: Generate test coverage
       run: npm test -- --coverage --watchAll=false
       env:
         CI: true
-        ENABLE_DEMO_MODE: true
+        ENABLE_REAL_TRADING: true
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
