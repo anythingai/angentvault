@@ -86,9 +86,11 @@ export default function Navbar() {
             key={item.name} 
             href={item.href} 
             className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-              (item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)) 
-                ? 'bg-white bg-opacity-10 text-white' 
-                : 'text-white hover:bg-white hover:bg-opacity-10'
+              item.name === 'Home'
+                ? 'text-white hover:bg-white hover:bg-opacity-10'
+                : (item.href === '/' ? pathname === '/' : pathname.startsWith(item.href))
+                  ? 'bg-white bg-opacity-10 text-white'
+                  : 'text-white hover:bg-white hover:bg-opacity-10'
             }`}
           >
             {item.name}

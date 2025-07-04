@@ -12,6 +12,11 @@ interface Agent {
   strategy: string; // JSON string
   riskParameters: string; // JSON string
   performance: string | null; // JSON string
+  isPublic: boolean;
+  pricing: string | null; // JSON string
+  tags: string | null; // JSON string
+  rating: number | null;
+  verified: boolean;
   createdAt: string;
   lastExecutionTime?: string;
 }
@@ -89,6 +94,51 @@ const updateAgentStatus = async ({ agentId, status }: { agentId: string; status:
   return res.json();
 };
 
+const deleteAgent = async (agentId: string) => {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`/api/agents?agentId=${agentId}`, {
+    method: 'DELETE',
+    headers: { 
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to delete agent');
+  }
+  return res.json();
+};
+
+const updateAgentMarketplace = async ({ 
+  agentId, 
+  isPublic, 
+  pricing, 
+  tags 
+}: { 
+  agentId: string; 
+  isPublic: boolean; 
+  pricing?: any; 
+  tags?: string[]; 
+}) => {
+  const token = localStorage.getItem('token');
+  const res = await fetch(`/api/agents/${agentId}`, {
+    method: 'PUT',
+    headers: { 
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({ 
+      isPublic, 
+      pricing: pricing ? JSON.stringify(pricing) : null,
+      tags: tags ? JSON.stringify(tags) : null
+    }),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to update agent marketplace settings');
+  }
+  return res.json();
+};
+
 export default function AgentManagement() {
   const queryClient = useQueryClient();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -163,6 +213,23 @@ export default function AgentManagement() {
     },
   });
 
+  const deleteAgentMutation = useMutation({
+    mutationFn: deleteAgent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      if (selectedAgentId) {
+        setSelectedAgentId(null);
+      }
+    },
+  });
+
+  const marketplaceMutation = useMutation({
+    mutationFn: updateAgentMarketplace,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
+
   useEffect(() => {
     if (!selectedAgentId && agents.length > 0) {
       setSelectedAgentId(agents[0].id);
@@ -176,6 +243,43 @@ export default function AgentManagement() {
     if(action === 'start') status = 'active';
     if(action === 'stop') status = 'stopped';
     agentStatusMutation.mutate({ agentId, status });
+  };
+
+  const handleDeleteAgent = (agentId: string) => {
+    if (confirm('Are you sure you want to delete this agent? This action cannot be undone.')) {
+      deleteAgentMutation.mutate(agentId);
+    }
+  };
+
+  const handlePublishAgent = (agent: Agent) => {
+    if (agent.isPublic) {
+      // Unpublish
+      if (confirm('Are you sure you want to unpublish this agent from the marketplace?')) {
+        marketplaceMutation.mutate({
+          agentId: agent.id,
+          isPublic: false,
+          pricing: undefined,
+          tags: undefined
+        });
+      }
+    } else {
+      // Publish - prompt for marketplace settings
+      const pricingType = prompt('Enter pricing type (FREE, PER_QUERY, MONTHLY):', 'FREE');
+      const price = prompt('Enter price (0 for free):', '0');
+      const tags = prompt('Enter tags (comma-separated):', 'trading, ai');
+      
+      if (pricingType && price !== null && tags !== null) {
+        marketplaceMutation.mutate({
+          agentId: agent.id,
+          isPublic: true,
+          pricing: {
+            type: pricingType,
+            price: parseFloat(price) || 0
+          },
+          tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+        });
+      }
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -270,7 +374,23 @@ export default function AgentManagement() {
               </div>
             </div>
 
-            <div className="flex space-x-2 mt-4">
+            {/* Marketplace Status */}
+            <div className="flex items-center justify-between mt-3 mb-2">
+              <div className="flex items-center space-x-2">
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  agent.isPublic ? 'bg-green-600/20 text-green-400' : 'bg-gray-600/20 text-gray-400'
+                }`}>
+                  {agent.isPublic ? 'Published' : 'Private'}
+                </span>
+                {agent.isPublic && agent.pricing && (
+                  <span className="text-xs text-gray-400">
+                    {JSON.parse(agent.pricing).type === 'FREE' ? 'Free' : `$${JSON.parse(agent.pricing).price}`}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex space-x-2 mt-2">
                 {agent.status === 'active' ? (
                 <button
                   onClick={(e) => {
@@ -300,6 +420,30 @@ export default function AgentManagement() {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded text-sm transition-colors"
               >
                 Stop
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePublishAgent(agent);
+                }}
+                className={`flex-1 text-white py-2 px-3 rounded text-sm transition-colors ${
+                  agent.isPublic 
+                    ? 'bg-orange-600 hover:bg-orange-700' 
+                    : 'bg-purple-600 hover:bg-purple-700'
+                }`}
+                disabled={marketplaceMutation.isPending}
+              >
+                {marketplaceMutation.isPending ? 'Updating...' : (agent.isPublic ? 'Unpublish' : 'Publish')}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteAgent(agent.id);
+                }}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded text-sm transition-colors"
+                disabled={deleteAgentMutation.isPending}
+              >
+                {deleteAgentMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

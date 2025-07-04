@@ -64,7 +64,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse, userId: stri
 
 async function handlePut(req: NextApiRequest, res: NextApiResponse, userId: string, agentId: string) {
   try {
-    const { status, name, description, strategy, riskParameters } = req.body;
+    const { status, name, description, strategy, riskParameters, isPublic, pricing, tags } = req.body;
 
     // Verify the agent belongs to the user
     const existingAgent = await prisma.agent.findFirst({
@@ -82,11 +82,14 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse, userId: stri
     const updatedAgent = await prisma.agent.update({
       where: { id: agentId },
       data: {
-        ...(status && { status }),
+        ...(status !== undefined && { status }),
         ...(name && { name }),
-        ...(description && { description }),
+        ...(description !== undefined && { description }),
         ...(strategy && { strategy: typeof strategy === 'string' ? strategy : JSON.stringify(strategy) }),
         ...(riskParameters && { riskParameters: typeof riskParameters === 'string' ? riskParameters : JSON.stringify(riskParameters) }),
+        ...(isPublic !== undefined && { isPublic }),
+        ...(pricing !== undefined && { pricing: typeof pricing === 'string' ? pricing : JSON.stringify(pricing) }),
+        ...(tags !== undefined && { tags: typeof tags === 'string' ? tags : JSON.stringify(tags) }),
         updatedAt: new Date()
       }
     });

@@ -19,11 +19,18 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
     'plugin:react/recommended',
     'plugin:react-hooks/recommended',
+    'plugin:cypress/recommended',
+    'plugin:chai-friendly/recommended',
+  ],
+  plugins: [
+    'cypress',
+    'chai-friendly',
   ],
   env: {
     browser: true,
     es2020: true,
     node: true,
+    'cypress/globals': true,
   },
   overrides: [
     {
@@ -61,6 +68,19 @@ module.exports = {
         '@typescript-eslint/no-empty-object-type': 'off', // Allow empty interfaces in type definitions
       },
     },
+    {
+      files: ['cypress/**/*.ts', 'cypress/**/*.js'],
+      rules: {
+        '@typescript-eslint/no-unused-expressions': 'off', // Disable for Cypress files
+        'no-unused-expressions': 'off', // Disable for Cypress files
+        'chai-friendly/no-unused-expressions': 'error', // Use chai-friendly instead
+        'cypress/no-unnecessary-waiting': 'off', // Allow cy.wait() when needed
+        'cypress/assertion-before-screenshot': 'warn',
+        'cypress/no-force': 'warn',
+        'cypress/no-pause': 'error',
+        'cypress/unsafe-to-chain-command': 'off', // Disable unsafe chaining rule for now
+      },
+    },
   ],
   rules: {
     '@typescript-eslint/no-explicit-any': 'off', // Changed to off for build
@@ -81,6 +101,9 @@ module.exports = {
     'no-var': 'warn', // Changed to warn
     'react-hooks/exhaustive-deps': 'warn',
     'no-unused-vars': 'off',
+    // Chai-friendly rules
+    'no-unused-expressions': 'off', // Turn off the base rule
+    'chai-friendly/no-unused-expressions': 'error', // Use chai-friendly instead
   },
   ignorePatterns: [
     'node_modules/',

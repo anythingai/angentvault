@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "paymentId": "pay_123456789",
+  "status": "COMPLETED",
+  "amount": 0.05,
+  "currency": "USDC",
+  "description": "AI Market sentiment analysis",
+  "transactionHash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "createdAt": "2025-01-20T15:30:00Z",
+  "message": "Payment processed successfully"
+} 

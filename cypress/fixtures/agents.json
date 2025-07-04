@@ -1,0 +1,73 @@
+{
+  "success": true,
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "BTC Momentum Trader",
+      "description": "AI agent focused on Bitcoin momentum trading with advanced technical analysis",
+      "status": "ACTIVE",
+      "strategy": {
+        "type": "momentum",
+        "indicators": ["rsi", "macd", "bollinger_bands"],
+        "timeframe": "1h"
+      },
+      "riskParameters": {
+        "maxTradeSize": 500,
+        "stopLoss": 3,
+        "takeProfit": 8,
+        "maxDailyLoss": 15,
+        "maxOpenPositions": 2
+      },
+      "performance": {
+        "totalReturn": 12.5,
+        "winRate": 68,
+        "totalTrades": 45,
+        "avgTradeSize": 250
+      },
+      "createdAt": "2025-01-15T10:30:00Z",
+      "userId": "user-001",
+      "pricing": {
+        "type": "PER_QUERY",
+        "price": 0.05,
+        "currency": "USDC"
+      },
+      "verified": true,
+      "rating": 4.8,
+      "tags": ["bitcoin", "momentum", "technical-analysis"]
+    },
+    {
+      "id": "agent-002",
+      "name": "DeFi Yield Optimizer",
+      "description": "Automated DeFi yield farming optimization across multiple protocols",
+      "status": "PAUSED",
+      "strategy": {
+        "type": "yield-farming",
+        "indicators": ["apy", "liquidity", "impermanent_loss"],
+        "timeframe": "4h"
+      },
+      "riskParameters": {
+        "maxTradeSize": 1000,
+        "stopLoss": 5,
+        "takeProfit": 12,
+        "maxDailyLoss": 20,
+        "maxOpenPositions": 3
+      },
+      "performance": {
+        "totalReturn": 8.2,
+        "winRate": 72,
+        "totalTrades": 28,
+        "avgTradeSize": 750
+      },
+      "createdAt": "2025-01-10T14:20:00Z",
+      "userId": "user-001",
+      "pricing": {
+        "type": "MONTHLY",
+        "price": 25.00,
+        "currency": "USDC"
+      },
+      "verified": false,
+      "rating": 4.2,
+      "tags": ["defi", "yield-farming", "optimization"]
+    }
+  ]
+} 

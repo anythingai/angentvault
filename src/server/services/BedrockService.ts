@@ -42,11 +42,13 @@ const RATE_LIMITS = {
 
 export class BedrockService {
   private client: BedrockRuntimeClient;
-  private modelId: string = 'amazon.nova-lite-v1:0';
+  private modelId: string;
   private requestCount: Map<string, number> = new Map();
   private concurrentRequests: number = 0;
 
   constructor() {
+    this.modelId = config.aws?.bedrockModelId || 'amazon.nova-lite-v1:0';
+    
     this.client = new BedrockRuntimeClient({
       region: config.aws?.region || 'us-east-1',
       credentials: {

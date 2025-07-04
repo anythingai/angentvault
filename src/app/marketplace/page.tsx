@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import AgentRating from '../components/AgentRating';
 
 interface MarketplaceAgent {
   id: string;
   name: string;
   description: string;
   creator: string;
+  userId: string;
   price: number;
   priceType: 'PER_QUERY' | 'MONTHLY' | 'FREE';
   performance: {
@@ -32,7 +34,11 @@ export default function MarketplacePage() {
 
   const fetchMarketplaceAgents = async () => {
     try {
-      const res = await fetch('/api/agents');
+      const res = await fetch('/api/agents?marketplace=true', {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       if (!res.ok) throw new Error('Failed to load agents');
       const json = await res.json();
 
@@ -41,16 +47,37 @@ export default function MarketplacePage() {
         id: a.id,
         name: a.name,
         description: a.description,
-        creator: a.userId ? a.userId.slice(0, 10) + '...' : 'Unknown',
-        price: a.pricing?.price ?? 0,
-        priceType: (a.pricing?.type ?? 'FREE').toUpperCase(),
+        creator: a.user?.name || a.userId ? a.userId.slice(0, 10) + '...' : 'Unknown',
+        userId: a.userId,
+        price: (() => {
+          try {
+            const pricing = typeof a.pricing === 'string' ? JSON.parse(a.pricing) : a.pricing;
+            return pricing?.price ?? 0;
+          } catch {
+            return 0;
+          }
+        })(),
+        priceType: (() => {
+          try {
+            const pricing = typeof a.pricing === 'string' ? JSON.parse(a.pricing) : a.pricing;
+            return (pricing?.type ?? 'FREE').toUpperCase();
+          } catch {
+            return 'FREE';
+          }
+        })(),
         performance: typeof a.performance === 'string' ? JSON.parse(a.performance) : a.performance || {
           winRate: 0,
           totalReturn: 0,
           subscriberCount: 0,
           totalTrades: 0,
         },
-        tags: a.tags ?? [],
+        tags: (() => {
+          try {
+            return typeof a.tags === 'string' ? JSON.parse(a.tags) : (a.tags ?? []);
+          } catch {
+            return [];
+          }
+        })(),
         rating: a.rating ?? 0,
         verified: a.verified ?? false,
       }));
@@ -91,7 +118,8 @@ export default function MarketplacePage() {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('Please log in to subscribe to agents');
+        // Redirect to login page for logged-out users
+        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
         return;
       }
 
@@ -126,6 +154,27 @@ export default function MarketplacePage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">Agent Marketplace</h1>
         <p className="text-gray-400">Discover and subscribe to high-performing AI trading agents</p>
+        {!localStorage.getItem('token') && (
+          <div className="mt-4 p-4 bg-purple-600/20 border border-purple-500/30 rounded-lg">
+            <p className="text-purple-300 text-sm">
+              💡 <strong>New to AgentVault?</strong> Sign up to create your own agents and subscribe to marketplace agents!
+            </p>
+            <div className="mt-2 flex gap-2">
+              <a 
+                href="/register" 
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+              >
+                Sign Up
+              </a>
+              <a 
+                href="/login" 
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+              >
+                Log In
+              </a>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -176,14 +225,20 @@ export default function MarketplacePage() {
           <div key={agent.id} className="crypto-card p-6 hover:border-purple-500 transition-colors">
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center space-x-2">
-                <h3 className="text-lg font-semibold text-white">{agent.name}</h3>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-white">{agent.name}</h3>
+                  <div className="mt-1 mb-3">
+                    <AgentRating 
+                      agentId={agent.id} 
+                      currentRating={agent.rating} 
+                      size="md" 
+                      interactive={false}
+                    />
+                  </div>
+                </div>
                 {agent.verified && (
                   <span className="text-blue-400" title="Verified Agent">✓</span>
                 )}
-              </div>
-              <div className="flex items-center space-x-1">
-                <span className="text-yellow-400">★</span>
-                <span className="text-white text-sm">{agent.rating}</span>
               </div>
             </div>
 
@@ -238,10 +293,35 @@ export default function MarketplacePage() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-gray-700">
-              <div className="flex justify-between items-center text-xs text-gray-400">
+              <div className="flex justify-between items-center text-xs text-gray-400 mb-3">
                 <span>Creator: {agent.creator}</span>
                 <span>x402pay enabled</span>
               </div>
+              
+              {/* Rating Section for Logged-in Users */}
+              {(() => {
+                const token = localStorage.getItem('token');
+                const userId = localStorage.getItem('userId'); // Assume userId is stored after login
+                // agent.creator is a string like 'cmcm8cn9u0...' or agent.userId
+                // If userId matches agent.userId, do not show rating
+                if (token && userId && agent.userId && userId !== agent.userId) {
+                  return (
+                    <div className="mt-3 pt-3 border-t border-gray-700">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-400">Rate this agent:</span>
+                        <AgentRating 
+                          agentId={agent.id} 
+                          currentRating={agent.rating} 
+                          size="sm" 
+                          interactive={true}
+                          showReview={true}
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </div>
         ))}

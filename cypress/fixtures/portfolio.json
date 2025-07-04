@@ -1,0 +1,65 @@
+{
+  "success": true,
+  "data": {
+    "portfolio": {
+      "totalValue": 15420.75,
+      "totalChange24h": 245.50,
+      "totalChangePercentage24h": 1.62
+    },
+    "performance": {
+      "totalReturn": 1245.30,
+      "totalReturnPercentage": 8.78,
+      "sharpeRatio": 1.45,
+      "maxDrawdown": -5.2,
+      "volatility": 12.3
+    },
+    "externalData": [
+      {
+        "asset": "BTC",
+        "balance": 0.25,
+        "balanceUSD": 10812.63,
+        "allocation": 70.1
+      },
+      {
+        "asset": "ETH",
+        "balance": 1.5,
+        "balanceUSD": 3976.13,
+        "allocation": 25.8
+      },
+      {
+        "asset": "USDC",
+        "balance": 632.00,
+        "balanceUSD": 632.00,
+        "allocation": 4.1
+      }
+    ],
+    "recentTrades": [
+      {
+        "id": "trade-001",
+        "type": "BUY",
+        "fromAsset": "USDC",
+        "toAsset": "BTC",
+        "amount": 0.05,
+        "usdValue": 2162.53,
+        "executedAt": "2025-01-20T14:30:00Z",
+        "agent": {
+          "id": "agent-001",
+          "name": "BTC Momentum Trader"
+        }
+      },
+      {
+        "id": "trade-002",
+        "type": "SELL",
+        "fromAsset": "ETH",
+        "toAsset": "USDC",
+        "amount": 0.2,
+        "usdValue": 530.15,
+        "executedAt": "2025-01-20T12:15:00Z",
+        "agent": {
+          "id": "agent-002",
+          "name": "DeFi Yield Optimizer"
+        }
+      }
+    ]
+  }
+} 
