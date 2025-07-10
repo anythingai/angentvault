@@ -41,7 +41,6 @@
     "**/*.test.ts", 
     "**/*.spec.ts",
     ".next",
-    "cypress",
     "**/node_modules/**"
   ]
 } 

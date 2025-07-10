@@ -16,16 +16,18 @@ export default function RegisterPage() {
     confirmPassword: ''
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [hasTriedWalletReg, setHasTriedWalletReg] = useState(false);
   const router = useRouter();
   const { address: connectedAddress, isConnected } = useAccount();
   const [error, setError] = useState('');
 
-  // Automatically register once wallet is connected
-  useEffect(() => {
+  // Manual wallet registration (only when explicitly triggered)
     const registerWithWallet = async () => {
-      if (!isConnected || !connectedAddress) return;
+    if (!isConnected || !connectedAddress || isCreating || hasTriedWalletReg) return;
+    
       try {
         setIsCreating(true);
+      setHasTriedWalletReg(true);
         setError('');
 
         const response = await fetch('/api/auth/register', {
@@ -54,8 +56,14 @@ export default function RegisterPage() {
         setIsCreating(false);
       }
     };
-    registerWithWallet();
-  }, [isConnected, connectedAddress, formData.name, formData.email, router]);
+
+  // Reset registration attempt when wallet disconnects
+  useEffect(() => {
+    if (!isConnected) {
+      setHasTriedWalletReg(false);
+      setError('');
+    }
+  }, [isConnected]);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,8 +129,22 @@ export default function RegisterPage() {
           )}
           
           {/* Wallet Connection via RainbowKit */}
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center space-y-4">
             <ConnectButton showBalance={false} />
+            {isConnected && connectedAddress && !hasTriedWalletReg && (
+              <button
+                onClick={registerWithWallet}
+                disabled={isCreating}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200"
+              >
+                {isCreating ? 'Creating Account...' : 'Register with Connected Wallet'}
+              </button>
+            )}
+            {isCreating && (
+              <div className="text-sm text-gray-400 text-center">
+                Creating your account and setting up your wallet...
+              </div>
+            )}
           </div>
           <p className="text-xs text-gray-400 mt-2 text-center">Supports Coinbase Wallet, MetaMask, WalletConnect, and more</p>
 

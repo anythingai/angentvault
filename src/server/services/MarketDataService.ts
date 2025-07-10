@@ -356,8 +356,12 @@ export class MarketDataService extends EventEmitter {
 
   /**
    * Use fallback market data when external APIs are unavailable
+   * Only allowed in development or test environments
    */
   private async useFallbackData(): Promise<void> {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Fallback market data is not allowed in production.');
+    }
     try {
       // Use reasonable fallback prices (approximate current market values)
       const fallbackTickers: MarketTicker[] = [

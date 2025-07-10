@@ -12,6 +12,7 @@ import { FaUser } from 'react-icons/fa';
 
 const authNav = [
   { name: 'Dashboard', href: '/dashboard' },
+  { name: 'Wallet', href: '/wallet' },
   { name: 'Agents', href: '/agents' },
   { name: 'Marketplace', href: '/marketplace' },
   { name: 'Analytics', href: '/analytics' },
@@ -26,18 +27,14 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const { login, isConnected, isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const rawPath = usePathname();
   const pathname = rawPath || '/';
   const router = useRouter();
 
   const navigation = isAuthenticated ? authNav : publicNav;
 
-  useEffect(() => {
-    if (isConnected) {
-      login();
-    }
-  }, [isConnected, login]);
+  // Removed automatic login when wallet connects - this should be handled explicitly by user action
 
   // Scroll detection for navbar background effect
   useEffect(() => {

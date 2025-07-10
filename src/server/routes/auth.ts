@@ -172,24 +172,47 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Ensure user has a wallet
-    if (!user.walletAddress && user.wallets.length === 0) {
-      try {
-        const wallet = await cdpWalletService.getOrCreateWallet(user.id);
-        const walletAddress = wallet.addresses?.[0]?.id || wallet.id;
+    // Ensure user has a wallet - but don't create new one if one exists
+    if (!user.walletAddress) {
+      // Check if user has wallet in Wallet table
+      const existingWallet = await prisma.wallet.findFirst({
+        where: { userId: user.id }
+      });
+      
+      if (existingWallet) {
+        // User has wallet in database, update user record
+        const addresses = JSON.parse(existingWallet.addresses);
+        const address = Array.isArray(addresses) ? addresses[0] : addresses[Object.keys(addresses)[0]];
         
         await prisma.user.update({
           where: { id: user.id },
+          data: { walletAddress: address },
+        });
+        
+        user.walletAddress = address;
+        logger.info('Updated user with existing wallet address', { userId: user.id, walletAddress: address });
+      } else {
+        // No wallet exists, create one
+        try {
+          const wallet = await cdpWalletService.getOrCreateWallet(user.id);
+          const walletAddress = wallet.address || wallet.id;
+          
+          await prisma.user.update({
+            where: { id: user.id },
           data: { walletAddress },
         });
         
         user.walletAddress = walletAddress;
+          logger.info('Created new wallet for existing user', { userId: user.id, walletAddress });
       } catch (walletError) {
         logger.error('Failed to create wallet for existing user:', walletError);
         return res.status(500).json({
           error: 'Failed to initialize user wallet',
         });
       }
+      }
+    } else {
+      logger.info('User already has wallet address', { userId: user.id, walletAddress: user.walletAddress });
     }
 
     // Generate JWT token

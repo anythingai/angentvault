@@ -227,7 +227,7 @@ AgentVault is an autonomous cryptocurrency investment platform that combines AI-
 - **Frontend:** React.js with Next.js, Tailwind CSS
 - **Database:** PostgreSQL for primary data, Redis for caching
 - **API:** GraphQL for client communication, REST for external integrations
-- **Testing:** Jest for unit testing, Cypress for E2E testing
+- **Testing:** Jest for unit testing
 
 ## 3. Technology Integrations
 

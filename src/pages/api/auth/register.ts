@@ -65,36 +65,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    // Create CDP wallet for user
+    // Create CDP wallet for user only if they don't already have one
     const walletService = new CDPWalletService();
-    const wallet = await walletService.createWallet(user.id);
+    let finalWalletAddress = user.walletAddress;
+    let createdWallet = null;
+    
+    if (!finalWalletAddress) {
+      try {
+        createdWallet = await walletService.getOrCreateWallet(user.id);
+        
+        if (!createdWallet || !(createdWallet as any).address) {
+          throw new Error('Wallet creation returned invalid wallet object');
+        }
+        
+        finalWalletAddress = (createdWallet as any).address;
 
     // Update user with wallet address
-    if (!user.walletAddress) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { walletAddress: wallet.address },
+          data: { walletAddress: finalWalletAddress },
       });
-    }
 
     // Determine network (fallback to env or default)
-    const network = (wallet as any).network || process.env.CDP_NETWORK || 'base-sepolia';
+        const network = (createdWallet as any).network || process.env.CDP_NETWORK || 'base-sepolia';
 
     // Store wallet data - use address as walletId if no explicit ID is provided
     await prisma.wallet.create({
       data: {
         userId: user.id,
-        walletId: (wallet as any).id ?? wallet.address,
-        addresses: JSON.stringify({ [network]: wallet.address }),
+            walletId: (createdWallet as any).id ?? (createdWallet as any).address,
+            addresses: JSON.stringify({ [network]: (createdWallet as any).address }),
         network,
       },
     });
+      } catch (walletError) {
+        // If wallet creation fails, clean up the user record
+        await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+        throw new Error(`Wallet creation failed: ${walletError instanceof Error ? walletError.message : 'Unknown error'}`);
+      }
+    }
 
     // Generate token using shared utility for consistency
     const token = generateToken({
       id: user.id,
       email: user.email ?? '',
-      walletAddress: (user.walletAddress ?? wallet.address) as string,
+      walletAddress: finalWalletAddress as string,
     });
 
     return res.status(201).json({
@@ -104,7 +119,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: user.id,
         email: user.email,
         name: user.name,
-        walletAddress: user.walletAddress ?? wallet.address,
+        walletAddress: finalWalletAddress,
       },
     });
   } catch (error: any) {

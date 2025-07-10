@@ -7,19 +7,64 @@ const AUTH_TOKEN_KEY = 'auth-token';
 export default function useAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
 
+  // Check for existing authentication on mount
   useEffect(() => {
-    const token = getCookie(AUTH_TOKEN_KEY) || (typeof window !== 'undefined' ? localStorage.getItem('token') : undefined);
-    if (token && isConnected) {
-      setIsAuthenticated(true);
-      // Fetch user data from backend if needed
-    } else {
-      setIsAuthenticated(false);
-    }
-  }, [isConnected]);
+    const checkAuth = async () => {
+      try {
+        const token = getCookie(AUTH_TOKEN_KEY) || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+        
+        if (token) {
+          // Verify token is still valid
+          const response = await fetch('/api/user/profile', {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              setIsAuthenticated(true);
+              setUser(data.user);
+            } else {
+              // Token is invalid, clean up
+              deleteCookie(AUTH_TOKEN_KEY);
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('token');
+              }
+              setIsAuthenticated(false);
+              setUser(null);
+            }
+          } else {
+            // Token is invalid, clean up
+            deleteCookie(AUTH_TOKEN_KEY);
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('token');
+            }
+            setIsAuthenticated(false);
+            setUser(null);
+          }
+        } else {
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      } catch (error) {
+        // Error during auth check; fallback to unauthenticated state
+        setIsAuthenticated(false);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   const login = useCallback(async () => {
     try {
@@ -65,7 +110,7 @@ export default function useAuth() {
         }
       }
     } catch (error) {
-      // Login error occurred - handle error appropriately
+      // Error during login; handled silently
     }
   }, [isConnected, address, connect, connectors]);
 
@@ -86,5 +131,6 @@ export default function useAuth() {
     logout,
     address,
     isConnected,
+    isLoading,
   };
 } 

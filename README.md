@@ -504,6 +504,7 @@ Before deploying AgentVault to production, ensure the following:
 - **Wallet Security**: End users can export/backup their wallet keys. No private keys are ever exposed to the backend.
 - **Compliance**: All PRD and hackathon requirements are met. All user actions are authenticated and authorized. No test/demo data in production.
 - **Documentation**: This checklist is reviewed and all steps are complete before launch.
+- **No fallback, mock, or demo data**: All fallback logic, mock objects, demo components, stubs, and sample datasets are removed or disabled in production. Only real data is used in all environments except for automated tests.
 
 ---
 

@@ -3,12 +3,9 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
-import dynamic from 'next/dynamic'
+import WalletProvider from './providers/WalletProvider'
 
 const inter = Inter({ subsets: ['latin'] })
-
-// Lazy load wallet provider to avoid SSR issues
-const WalletProvider = dynamic(() => import('./providers/WalletProvider'), { ssr: false })
 
 export const metadata: Metadata = {
   title: 'AgentVault - Autonomous Crypto Investment Platform',

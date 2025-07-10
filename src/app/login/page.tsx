@@ -12,11 +12,16 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [hasTriedWalletAuth, setHasTriedWalletAuth] = useState(false);
   const router = useRouter();
   const { isConnected, address } = useAccount();
 
   const handleWalletLogin = useCallback(async (walletAddress: string) => {
+    if (isConnecting || hasTriedWalletAuth) return; // Prevent duplicate attempts
+    
     setIsConnecting(true);
+    setHasTriedWalletAuth(true);
+    
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -48,15 +53,22 @@ export default function LoginPage() {
     } finally {
       setIsConnecting(false);
     }
-  }, [router]);
+  }, [router, isConnecting, hasTriedWalletAuth]);
 
-  // Redirect to dashboard when wallet is connected
-  useEffect(() => {
-    if (isConnected && address) {
-      // Authenticate with wallet address
+  // Manual wallet authentication (only when user explicitly connects)
+  const handleManualWalletAuth = useCallback(() => {
+    if (isConnected && address && !hasTriedWalletAuth) {
       handleWalletLogin(address);
     }
-  }, [isConnected, address, router, handleWalletLogin]);
+  }, [isConnected, address, handleWalletLogin, hasTriedWalletAuth]);
+
+  // Reset auth attempt when wallet disconnects
+  useEffect(() => {
+    if (!isConnected) {
+      setHasTriedWalletAuth(false);
+      setError('');
+    }
+  }, [isConnected]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,12 +124,24 @@ export default function LoginPage() {
 
         <div className="crypto-card p-8 space-y-6">
           {/* Wallet Connection via RainbowKit */}
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center space-y-4">
             <ConnectButton showBalance={false} />
+            {isConnected && address && !hasTriedWalletAuth && (
+              <button
+                onClick={handleManualWalletAuth}
+                disabled={isConnecting}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200"
+              >
+                {isConnecting ? 'Authenticating...' : 'Login with Connected Wallet'}
+              </button>
+            )}
+            {isConnecting && (
+              <div className="text-sm text-gray-400 text-center">
+                Authenticating with your wallet...
+              </div>
+            )}
           </div>
-          <p className="text-xs text-gray-400 mt-2 text-center">
-            Your wallet (MetaMask, Coinbase Wallet, WalletConnect, etc.) can be used to sign in. A secure agent wallet is provisioned for you automatically after connecting.
-          </p>
+          <p className="text-xs text-gray-400 mt-2 text-center">Supports Coinbase Wallet, MetaMask, WalletConnect, and more</p>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">

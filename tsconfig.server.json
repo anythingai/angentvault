@@ -28,7 +28,6 @@
     "src/pages/**/*",
     "**/*.test.ts",
     "**/*.spec.ts",
-    ".next",
-    "cypress"
+    ".next"
   ]
 } 
