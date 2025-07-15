@@ -348,67 +348,8 @@ export class MarketDataService extends EventEmitter {
         return;
       }
       
-      // For other errors, use fallback data to ensure the app keeps working
-      await this.useFallbackData();
-      logger.error('Failed to fetch external prices, using fallback data:', error);
-    }
-  }
-
-  /**
-   * Use fallback market data when external APIs are unavailable
-   * Only allowed in development or test environments
-   */
-  private async useFallbackData(): Promise<void> {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Fallback market data is not allowed in production.');
-    }
-    try {
-      // Use reasonable fallback prices (approximate current market values)
-      const fallbackTickers: MarketTicker[] = [
-        {
-          symbol: 'BTC/USD',
-          price: 96800,
-          volume24h: 25000000000,
-          change24h: 0.5,
-          changePercentage24h: 0.5,
-          marketCap: 1900000000000,
-          lastUpdated: new Date()
-        },
-        {
-          symbol: 'ETH/USD',
-          price: 3350,
-          volume24h: 15000000000,
-          change24h: 1.2,
-          changePercentage24h: 1.2,
-          marketCap: 400000000000,
-          lastUpdated: new Date()
-        },
-        {
-          symbol: 'SOL/USD',
-          price: 185,
-          volume24h: 2000000000,
-          change24h: -0.8,
-          changePercentage24h: -0.8,
-          marketCap: 85000000000,
-          lastUpdated: new Date()
-        }
-      ];
-
-      // Only update if we don't have recent data (older than 1 hour)
-      for (const ticker of fallbackTickers) {
-        const existingData = await db.marketData.findUnique({
-          where: { symbol: ticker.symbol }
-        });
-        
-        if (!existingData || 
-            (new Date().getTime() - existingData.lastUpdated.getTime()) > 3600000) {
-          await this.updateMarketData(ticker);
-        }
-      }
-      
-      logger.info('Fallback market data applied');
-    } catch (error) {
-      logger.error('Failed to apply fallback data:', error);
+      // For other errors, log and do not use fallback data
+      logger.error('Failed to fetch external prices:', error);
     }
   }
 

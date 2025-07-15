@@ -123,6 +123,25 @@ export default function MarketplacePage() {
         return;
       }
 
+      // Find the agent to determine pricing
+      const agent = agents.find(a => a.id === agentId);
+      if (!agent) {
+        alert('Agent not found');
+        return;
+      }
+
+      let queryType = 'basic_query'; // Default for free agents
+      
+      // Determine the correct query type based on agent pricing
+      if (agent.priceType === 'FREE') {
+        queryType = 'basic_query';
+      } else if (agent.priceType === 'PER_QUERY') {
+        queryType = 'market_analysis'; // Use appropriate query type
+      } else if (agent.priceType === 'MONTHLY') {
+        // For monthly subscriptions, we might want to handle differently
+        queryType = 'agent_deployment';
+      }
+
       const response = await fetch('/api/payments/agent-query', {
         method: 'POST',
         headers: {
@@ -131,16 +150,20 @@ export default function MarketplacePage() {
         },
         body: JSON.stringify({
           agentId,
-          queryType: 'subscription',
+          queryType,
         }),
       });
 
       const result = await response.json();
       if (result.success) {
-        alert('Subscription initiated! Payment processed via x402pay.');
+        if (agent.priceType === 'FREE') {
+          alert('Success! You can now use this free agent.');
+        } else {
+          alert('Payment initiated! You can now use this agent.');
+        }
         // Optionally refresh the page or update UI
       } else {
-        alert(`Subscription failed: ${result.error}`);
+        alert(`Subscription failed: ${result.error || result.message || 'Unknown error'}`);
       }
     } catch (error) {
       // Handle error silently in production

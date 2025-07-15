@@ -372,24 +372,11 @@ class AgentKitService {
   }
 
   private async analyzeYieldOpportunities(): Promise<any[]> {
-    // This would integrate with DeFi protocols to find yield opportunities
-    // For now, return a structured response
-    return [
-      {
-        protocol: 'Aave',
-        asset: 'USDC',
-        apy: 4.2,
-        riskLevel: 1,
-        recommendedAllocation: 1000
-      },
-      {
-        protocol: 'Compound',
-        asset: 'USDC', 
-        apy: 3.8,
-        riskLevel: 1,
-        recommendedAllocation: 800
-      }
-    ];
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('analyzeYieldOpportunities is not implemented for production.');
+    }
+    // In non-production, return an empty array (no demo data)
+    return [];
   }
 
   /* ------------------------------------------------------------------ */
